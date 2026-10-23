@@ -264,28 +264,81 @@ export default function(pi: ExtensionAPI) {
   });
   pi.on("model_select", (_event, ctx) => render(ctx));
 
+  function finishSegment(run: ActiveExchange, ctx: ExtensionContext, endedAtMs: number, endedMonoMs: number, aborted: boolean) {
+    statsCache.invalidate();
+    const currentUsage = statsCache.get(ctx.sessionManager).usage;
+    const isShared = run.userMessages > 1;
+    const record: ExchangeRecord = {
+      version: 1,
+      startedAt: new Date(run.segmentStartedAtMs).toISOString(),
+      endedAt: new Date(endedAtMs).toISOString(),
+      elapsedMs: Math.round(Math.max(0, endedMonoMs - run.segmentStartedMonoMs)),
+      model: run.model,
+      usage: subtractUsage(currentUsage, run.segmentBaseline),
+      assistantMessages: run.assistantMessages - run.segmentAssistantMessages,
+      toolCalls: run.toolCalls - run.segmentToolCalls,
+      aborted,
+      ...(run.segmentLabel ? { label: run.segmentLabel } : {}),
+      ...(run.segmentFirstOutputMs === undefined ? {} : { firstOutputMs: Math.round(run.segmentFirstOutputMs) }),
+      modelMs: Math.round(run.modelMs - run.segmentModelMs),
+      toolMs: Math.round(run.toolMs - run.segmentToolMs),
+      // For queued inputs we measure processing from message_start, not queue wait.
+      timingBasis: isShared ? "processing" : "agent-start",
+      sharedRun: isShared,
+    };
+    run.completedSegments.push(record);
+    run.segmentBaseline = currentUsage;
+  }
+
   pi.on("before_agent_start", (event, ctx) => {
     if(event.messageType !== "user" || active) return;
+    scan(ctx);
+    const now=Date.now(), mono=performance.now(), baseline={...totals};
     active = {
-      startedAtMs: Date.now(), startedMonoMs: performance.now(),
+      startedAtMs: now, startedMonoMs: mono,
       model: ctx.model?.id ?? "unknown", usage: emptyUsage(),
       assistantMessages: 0, toolCalls: 0, modelMs: 0, toolMs: 0,
-      label: nextLabel,
+      baseline, userMessages: 0, segmentStartedAtMs: now, segmentStartedMonoMs: mono,
+      segmentBaseline: baseline, segmentAssistantMessages: 0, segmentToolCalls: 0,
+      segmentModelMs: 0, segmentToolMs: 0, segmentLabel: nextLabel, completedSegments: [],
     };
     nextLabel = undefined;
     startTimer(ctx);
     render(ctx);
   });
-  pi.on("message_start", (event, _ctx) => {
-    if(active && event.message.role === "assistant" && active.modelStart === undefined) {
+
+  pi.on("message_start", (event, ctx) => {
+    if(!active) return;
+    if(event.message.role === "user") {
+      active.userMessages += 1;
+      if(active.userMessages > 1) {
+        const now=Date.now(), mono=performance.now();
+        finishSegment(active, ctx, now, mono, false);
+        active.segmentStartedAtMs=now;
+        active.segmentStartedMonoMs=mono;
+        active.segmentFirstOutputMs=undefined;
+        active.segmentAssistantMessages=active.assistantMessages;
+        active.segmentToolCalls=active.toolCalls;
+        active.segmentModelMs=active.modelMs;
+        active.segmentToolMs=active.toolMs;
+        active.segmentLabel=undefined;
+      }
+    } else if(event.message.role === "assistant" && active.modelStart === undefined) {
       active.modelStart = performance.now();
     }
   });
+
   pi.on("message_update", (event, _ctx) => {
-    if(!active || active.firstOutputMs !== undefined) return;
+    if(!active) return;
     const kind = event.assistantMessageEvent.type;
     if(kind === "text_delta" || kind === "thinking_delta" || kind === "toolcall_start") {
-      active.firstOutputMs = Math.max(0, performance.now() - active.startedMonoMs);
+      const now=performance.now();
+      if(active.firstOutputMs === undefined) {
+        active.firstOutputMs = Math.max(0, now - active.startedMonoMs);
+      }
+      if(active.segmentFirstOutputMs === undefined) {
+        active.segmentFirstOutputMs = Math.max(0, now - active.segmentStartedMonoMs);
+      }
     }
   });
   pi.on("message_end", (event, ctx) => {
@@ -308,7 +361,6 @@ export default function(pi: ExtensionAPI) {
     if(!active) return;
     const started = toolStarted.get(event.toolCallId);
     if(started !== undefined) {
-      // Sum tool invocation durations; concurrent tools can overlap.
       active.toolMs += typeof event.durationMs === "number"
         ? Math.max(0, event.durationMs)
         : Math.max(0, performance.now() - started);
@@ -316,33 +368,40 @@ export default function(pi: ExtensionAPI) {
     }
     render(ctx);
   });
+
   pi.on("agent_settled", async (event, ctx) => {
     if(!active) return;
     stopTimer();
-    const current = active;
-    active = undefined;
+    const run=active;
+    active=undefined;
     toolStarted.clear();
-    const elapsedMs = Math.max(0, performance.now() - current.startedMonoMs);
-    const record: ExchangeRecord = {
-      version: 1, startedAt: new Date(current.startedAtMs).toISOString(),
-      endedAt: new Date().toISOString(), elapsedMs: Math.round(elapsedMs),
-      model: current.model, usage: current.usage,
-      assistantMessages: current.assistantMessages, toolCalls: current.toolCalls,
-      aborted: event.aborted === true,
-      ...(current.label ? { label: current.label } : {}),
-      ...(current.firstOutputMs === undefined ? {} : { firstOutputMs: Math.round(current.firstOutputMs) }),
-      modelMs: Math.round(current.modelMs), toolMs: Math.round(current.toolMs),
-    };
-    pi.appendEntry(ENTRY_TYPE, record);
-    if(globalTracking) {
-      try {
-        const { appendIndexedExchange } = await import("../src/global-store.ts");
-        const sessionId = ctx.sessionManager.getSessionId();
-        await appendIndexedExchange({...record, id: sessionId + ":" + record.startedAt, sessionId, project: ctx.cwd});
-      } catch(error) {
-        ctx.ui.notify(`pi-style index write failed: ${String(error)}`, "warning");
+    const endedAtMs=Date.now(), endedMonoMs=performance.now();
+    // If a retried/custom sequence did not re-emit the user message, keep the
+    // initial user request rather than inventing an extra prompt.
+    finishSegment(run, ctx, endedAtMs, endedMonoMs, event.aborted === true);
+    const shared=run.userMessages > 1;
+    for(const record of run.completedSegments) {
+      if(shared) {
+        record.sharedRun=true;
+        record.timingBasis="processing";
+      }
+      pi.appendEntry(ENTRY_TYPE, record);
+      if(globalTracking) {
+        try {
+          const { appendIndexedExchange } = await import("../src/global-store.ts");
+          const sessionId=ctx.sessionManager.getSessionId();
+          await appendIndexedExchange({
+            ...record,
+            id: sessionId + ":" + record.startedAt + ":" + record.endedAt,
+            sessionId,
+            project: ctx.cwd,
+          });
+        } catch(error) {
+          ctx.ui.notify(`pi-style index write failed: ${String(error)}`, "warning");
+        }
       }
     }
+    statsCache.invalidate();
     scan(ctx);
     render(ctx);
   });
