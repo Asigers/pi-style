@@ -179,3 +179,54 @@ test("queued user messages produce separate timing records, with shared-run attr
   assert.equal(second.usage.input,3);
   assert.ok(first.usage.cost + second.usage.cost > 0.49);
 });
+
+test("reload does not warn while theme registry is unavailable, then restores Forest", async () => {
+  const handlers = new Map<string, Function>();
+  const commands = new Map<string, {handler:Function}>();
+  const warnings:string[]=[];
+  const original={name:"system"};
+  const forest={name:"pi-style-forest"};
+  let current=original;
+  let themeReady=false;
+  const data:unknown[]=[];
+  const ui={
+    get theme(){return current;},
+    getTheme:(name:string)=>themeReady && name==="pi-style-forest" ? forest : undefined,
+    setTheme:(value: {name:string}|string)=>{
+      assert.equal(typeof value, "object","theme change must not persist user selection");
+      current = value as {name:string};
+      return {success:true};
+    },
+    setStatus:()=>{},setWidget:()=>{},setFooter:()=>{},setHeader:()=>{},
+    getEditorComponent:()=>undefined,setEditorComponent:()=>{},
+    getToolsExpanded:()=>true,setToolsExpanded:()=>{},
+    notify:(msg:string)=>warnings.push(msg),
+  };
+  const ctx={
+    hasUI:true,mode:"tui",cwd:"/test",model:{id:"test",provider:"canway"},
+    sessionManager:{getSessionId:()=>"test",getLeafId:()=>null,getBranch:()=>data},
+    getContextUsage:()=>({percent:23.7,tokens:121500,contextWindow:512000}),
+    ui,
+  };
+  const pi={
+    on:(name:string,fn:Function)=>handlers.set(name,fn),
+    registerCommand:(name:string,cmd:{handler:Function})=>commands.set(name,cmd),
+    appendEntry:()=>{},
+  };
+  createExtension(pi as never);
+  // Pi has not yet called setRegisteredThemes when extension session_start runs.
+  await handlers.get("session_start")!({reason:"reload"},ctx);
+  assert.equal(current,original);
+  assert.deepEqual(warnings,[],"must not warn before registration");
+
+  // Simulate theme availability after one retry, plus a late applyFromSettings.
+  await new Promise(resolve=>setTimeout(resolve,25));
+  themeReady=true;
+  current=original;
+  await new Promise(resolve=>setTimeout(resolve,110));
+  assert.equal(current,forest);
+  assert.ok(!warnings.some(x=>x.includes("theme unavailable")));
+  await commands.get("pi-style")!.handler("off",ctx);
+  assert.equal(current,original,"off must restore original theme");
+  await handlers.get("session_shutdown")!({},ctx);
+});
