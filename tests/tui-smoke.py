@@ -23,7 +23,7 @@ if pid == 0:
     os.environ["TERM"] = "xterm-256color"
     os.environ["CI"] = "1"
     # Redirect Pi user settings to isolated temp directory.
-    os.execv(BIN, [BIN, "-e", ".", "--use-theme", "pi-style-blush"])
+    os.execv(BIN, [BIN, "-e", ".", "--use-theme", "pi-style-forest"])
 
 fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", 32, 100, 0, 0))
 
