@@ -8,7 +8,7 @@ import { emptyUsage, type ExchangeRecord } from "../src/metrics.ts";
 import { visibleWidth } from "@earendil-works/pi-tui";
 
 const base: FooterState = {
-  appearance:"cute", provider:"newapi", model:"gpt-6-long-context", 
+  appearance:"cute", provider:"newapi", model:"gpt-6-long-context",thinkingLevel:"high", 
   contextPercent:42, contextTokens:84000, contextWindow:200000,
   usage:{input:128000,output:18600,cacheRead:16000,cacheWrite:320,cost:0.145},
   running:true,elapsedMs:84000,
@@ -27,6 +27,7 @@ test("width-aware context-first footer keeps provider and model, removing low-pr
   }
   assert.equal(footerLines(120,base).length,1);
   assert.ok(footerLines(120,base)[0]?.includes("42.0% 84k/200k"));
+  assert.ok(footerLines(120,base)[0]?.includes("THINK high"));
   assert.ok(!footerLines(120,base).join("").includes("↑"));
   assert.ok(!footerLines(120,base).join("").includes("↓"));
   assert.ok(footerLines(120,base)[0]?.includes("01:24"));
@@ -157,4 +158,29 @@ test("long /name sessions sanitize control sequences and truncate to 36 terminal
   const control=footerLines(120,{...base,sessionTitle:"恶意" + String.fromCharCode(27) + "[31m标题\n下一行"});
   assert.ok(!control.join("").includes(String.fromCharCode(27)));
   assert.ok(control.every(line=>visibleWidth(line)<=120));
+});
+
+test("thinking level is core status alongside context, provider and model", () => {
+  for (const thinkingLevel of ["off","minimal","low","medium","high","xhigh","max"]) {
+    const state={...base,thinkingLevel};
+    for(const width of [120,95,75,60,45,40,32,28]) {
+      const lines=footerLines(width,state);
+      assert.ok(lines.some(line=>line.includes("CTX")),`no context at ${width}`);
+      assert.ok(lines.some(line=>line.includes("newapi")),`no provider at ${width}`);
+      assert.ok(lines.some(line=>line.includes("gpt-6")),`no model at ${width}`);
+      assert.ok(lines.some(line=>line.includes("THINK "+thinkingLevel)),`no thinking at ${width} for ${thinkingLevel}`);
+      assert.ok(lines.every(line=>visibleWidth(line)<=width),`overflow at ${width}`);
+      assert.ok(lines.length<=2);
+      assert.ok(!lines.join("").includes("↑"));
+    }
+  }
+  assert.ok(footerLines(120,{...base,thinkingLevel:undefined}).some(x=>x.includes("THINK --")));
+});
+test("thinking takes priority over named-session decoration and cost on narrow widths", () => {
+  const lines=footerLines(40,{...base,sessionTitle:"修复生产MySQL性能问题",thinkingLevel:"xhigh"});
+  assert.equal(lines.length,2);
+  assert.ok(lines.some(x=>x.includes("THINK xhigh")));
+  assert.ok(lines.some(x=>x.includes("newapi/gpt-6")));
+  assert.ok(lines.every(x=>visibleWidth(x)<=40));
+  assert.ok(!lines.join("").includes("~$"));
 });
