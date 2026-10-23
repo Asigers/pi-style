@@ -19,3 +19,5 @@ jobs:
       - run: npm install --ignore-scripts --no-audit --no-fund
       - run: npm run typecheck
       - run: npm test
+      - name: Exercise Pi in a live Linux pseudo-terminal
+        run: python3 tests/tui-smoke.py
