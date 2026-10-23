@@ -115,3 +115,9 @@ See [ROADMAP.md](docs/ROADMAP.md) for feature status and remaining tasks.
 ## License
 
 MIT.
+
+## Performance and TUI styling (v0.4)
+
+The Performance tab measures observed, non-overlapping wall time in **LLM**, **tools**, and **other** phases. LLM phase begins at Pi `turn_start` and includes local request preparation; it is not a direct measure of provider network latency. Concurrent and nested tool intervals contribute to tools wall time only once. When tool and LLM intervals overlap, tool takes precedence. Older sessions lack phase data and show an explicit empty state. The slowest operations list contains only tool names and durations, never tool arguments or outputs.
+
+Visual changes include a restrained `INPUT` frame, a temporary LLM/tool activity line while an agent is running, and native tool results with small duration/success indicators where supported. Original tool output and expansion remain available. Footer remains unchanged.
