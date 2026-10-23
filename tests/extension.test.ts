@@ -12,7 +12,7 @@ test("records one settled exchange including usage and timing, and restores hist
 
   const ctx = {
     hasUI: true,
-    mode: "tui",
+    mode: "rpc",
     model: { id: "test-model" },
     sessionManager: { getBranch: () => entries },
     getContextUsage: () => ({ percent: 25 }),
@@ -57,7 +57,7 @@ test("records one settled exchange including usage and timing, and restores hist
   assert.equal(saved.data.toolCalls, 1);
   assert.ok(saved.data.elapsedMs >= 0);
   assert.ok(saved.data.firstOutputMs >= 0);
-  assert.ok(statuses.at(-1)?.includes("last"));
+  assert.ok(statuses.at(-1)?.includes("✓"));
 
   await commands.get("pi-history")!.handler("", ctx);
   assert.ok(Array.isArray(widgets.at(-1)));
