@@ -2,7 +2,7 @@
 
 A **context-first terminal status bar, Forest Night theme, and local usage dashboard** for [Pi Coding Agent](https://pi.dev).
 
-> v0.3.3 · Forest Night (dark), one color palette · no prompt injection · local-first.
+> v0.4.0 · Forest Night (dark), one color palette · no prompt injection · local-first.
 
 ## Terminal preview
 
@@ -55,7 +55,7 @@ pi -e ./extensions/pi-style.ts --theme ./themes/pi-style-forest.json
 | `/pi-style header on/off` | Show/hide Border Collie startup header |
 | `/pi-style editor on/off` | Show/hide the minimal editor border marker |
 | `/pi-style quiet on/off` | Collapse/restore built-in tool outputs (no tool content changes) |
-| `/pi-tui` | Responsive dashboard: context, provider/model, tokens, estimated cost and tracked timing |
+| `/pi-tui` | Responsive Overview, Performance (LLM vs tools), History, Daily and Projects dashboard |
 | `/pi-usage` | Quick Token/Cache/Cost widget |
 | `/pi-history` | Last five completed exchanges |
 | `/pi-label <text>` | Optional label for *next* conversation; prompt is never stored |
@@ -64,7 +64,7 @@ pi -e ./extensions/pi-style.ts --theme ./themes/pi-style-forest.json
 
 ### Dashboard keyboard shortcuts
 
-- **1–4 / Tab / ← →**: Overview, History, Daily (UTC), Projects
+- **1–5 / Tab / ← →**: Overview, Performance, History, Daily (UTC), Projects
 - **j / k or ↑ / ↓**: scroll
 - **s**: sort recent / slowest / tokens (History)
 - **f**: filter all / successful / aborted (History)
@@ -74,7 +74,7 @@ pi -e ./extensions/pi-style.ts --theme ./themes/pi-style-forest.json
 
 Token counts derive from Pi session ledger entries (assistant, tool results, standalone usage, compaction, branch summaries), preserving separate **input / output / cache read / cache write**. Estimated cost comes from Pi's usage metadata, **not the actual New API/provider bill**.
 
-Conversation wall time is measured from `before_agent_start` to `agent_settled`. It includes tools, retries and automatic continuations. Optional telemetry fields `modelMs` and `toolMs` are **not** mutually-exclusive wall-time buckets: model duration observes assistant message span, and concurrent tool durations are summed.
+Conversation wall time is measured from `before_agent_start` to `agent_settled`. It includes tools, retries and automatic continuations. **Performance** tracks observed phase intervals: LLM phase begins at Pi `turn_start` (including local request preparation), ends with assistant output; tool intervals begin/end with execution events. Concurrent/nested tool spans are counted only once in tool wall time, and tool takes precedence in overlapping LLM/tool intervals. `OTHER` is the remaining wall time. This is not a direct measurement of provider network latency. Older records contain no phase data. Legacy `modelMs` and `toolMs` are cumulative, can overlap and must not be subtracted from wall time.
 
 - Each processed user message is recorded as a `pi-style.exchange` entry when the run settles. Queued inputs are segmented at user `message_start` boundaries. Shared runs explicitly record `sharedRun: true` and `timingBasis: "processing"`; queue waiting is not measured.
 - Current branch totals follow Pi session-tree navigation, not abandoned sibling branches.
@@ -98,7 +98,7 @@ Records contain timestamps, session ID, **absolute project directory path**, mod
 
 Designed against the latest `@earendil-works/pi-coding-agent` API. Component factories run **only in TUI mode**; RPC/Pi-Web needs its own browser rendering. Header replacement hides Pi's default startup hints; `/pi-style compact` restores them. Theme switching uses in-memory instances and does not overwrite the user's persisted theme setting; `/pi-style off` restores the prior theme. The custom footer can conflict with other extensions that also replace the footer, and manual theme changes during a session are not continuously monitored.
 
-CuteEditor subclasses the built-in `CustomEditor`, calling the stock editing logic and only decorating the bottom border; normal shortcuts and IME processing are intentionally unchanged.
+CuteEditor subclasses the built-in `CustomEditor` and customizes only a non-scrolling, non-working-status input top border; stock keybindings, cursor and IME handling remain in Pi. A transient activity widget shows the observed active LLM/tool phase only while running. Native tool output remains intact; selected built-in tool results receive a small status/duration accent.
 
 One theme is packaged. There is no browser/CSS layout, no actual provider billing reconciliation, no SQLite database, and no universal transcript re-skin. This repository is not a fork.
 
