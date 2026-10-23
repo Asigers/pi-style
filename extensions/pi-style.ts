@@ -103,6 +103,7 @@ export default function(pi: ExtensionAPI) {
       ctx.ui.setStatus(KEY, footerText(100, {
         appearance, provider: ctx.model?.provider ?? "unknown-provider",
         model: ctx.model?.id ?? active?.model ?? "unknown-model",
+        thinkingLevel: ctx.thinkingLevel,
         sessionTitle: ctx.sessionManager.getSessionName(),
         contextPercent: ctx.getContextUsage()?.percent,
         contextTokens: ctx.getContextUsage()?.tokens,
@@ -220,6 +221,7 @@ export default function(pi: ExtensionAPI) {
               appearance,
               provider: ctx.model?.provider ?? "unknown-provider",
               model: ctx.model?.id ?? active?.model ?? "unknown-model",
+        thinkingLevel: ctx.thinkingLevel,
         sessionTitle: ctx.sessionManager.getSessionName(),
               contextPercent: context?.percent,
               contextTokens: context?.tokens,
@@ -331,6 +333,7 @@ export default function(pi: ExtensionAPI) {
     }
   });
   pi.on("model_select", (_event, ctx) => render(ctx));
+  pi.on("thinking_level_select", (_event, ctx) => render(ctx));
 
   function finishSegment(run: ActiveExchange, ctx: ExtensionContext, endedAtMs: number, endedMonoMs: number, aborted: boolean) {
     statsCache.invalidate();
