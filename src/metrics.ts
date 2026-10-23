@@ -27,6 +27,12 @@ export interface ExchangeRecord {
   modelMs?: number;
   /** Sum of tool execution durations; may exceed wall time for concurrent tools. */
   toolMs?: number;
+  llmWallMs?: number;
+  toolWallMs?: number;
+  otherWallMs?: number;
+  llmCalls?: number;
+  toolExecutions?: number;
+  slowOps?: Array<{phase:"llm"|"tool";name:string;durationMs:number}>;
   /** Time begins when Pi processes a queued user message, not when it was typed. */
   timingBasis?: "agent-start" | "processing";
   /** Shared-run attribution may be imprecise when Pi batches queued messages. */
