@@ -239,3 +239,31 @@ test("reload does not warn while theme registry is unavailable, then restores Fo
   assert.equal(current,original,"off must restore original theme");
   await handlers.get("session_shutdown")!({},ctx);
 });
+
+test("tool result decoration preserves native content, duration and fallback", () => {
+  let resolver: Function | undefined;
+  const pi={
+    on:()=>{},
+    registerCommand:()=>{},
+    registerToolRenderer:(fn:Function)=>{resolver=fn;},
+  };
+  createExtension(pi as never);
+  assert.ok(resolver);
+  const native={
+    renderResult:()=>({
+      invalidate:()=>{},
+      render:(_width:number)=>["NATIVE OUTPUT", "original expansion controls"],
+    }),
+  };
+  const wrapped=resolver!("bash",()=>native);
+  assert.notEqual(wrapped,native);
+  const comp=wrapped.renderResult({}, {expanded:true,isPartial:false},
+    {fg:(_color:string,text:string)=>text},
+    {durationMs:1200,isError:false});
+  const lines=comp.render(100);
+  assert.ok(lines[0].includes("BASH"));
+  assert.ok(lines[0].includes("1.2s"));
+  assert.ok(lines.includes("NATIVE OUTPUT"));
+  assert.ok(lines.includes("original expansion controls"));
+  assert.equal(resolver!("custom-tool",()=>native),native,"non-built-in renderers untouched");
+});
