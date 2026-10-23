@@ -1,72 +1,69 @@
-# pi-style roadmap: a cute Pi terminal 🧁
+# pi-style roadmap · one Blush palette 🧁
 
-## What is actually customizable?
+## Design
 
-Pi's public Extension API can render persistent `setStatus()` text, multiline `setWidget()` content, theme palettes, custom header/footer components, a custom editor, tool renderers, and `ctx.ui.custom()` modal or overlay screens. The terminal component toolkit is `@earendil-works/pi-tui`.
+One dark `pi-style-blush` theme only. Colors: pink `#f5aeca`, lavender `#c7b6ee`, sage `#a6d8c0`, background `#231e2b`. The terminal remains readable and dense, rather than filling the screen with emoji.
 
-It **cannot** provide arbitrary CSS/web layout or seamlessly replace the entire transcript renderer and Pi's screen orchestration with one API call. For those, a standalone TUI over the SDK, or a maintained fork, would be a separate product. Prefer native extension points.
+Pi public APIs are used throughout: `setTheme`, `setHeader`, `setFooter`, `setEditorComponent`, `setWidget`, `ctx.ui.custom`. No fork or patch of Pi core.
 
-## Style direction
+## P0 · foundation (v0.1)
 
-**Soft, cute, usable** rather than emoji noise:
+- [x] Token / cache / estimated cost in the terminal
+- [x] Wall-clock exchange timer from `before_agent_start` to `agent_settled`
+- [x] Exchange entries persisted to Pi session JSONL
+- [x] `/pi-usage`, `/pi-history` widgets
 
-- Palette: blush pink `#efb9c8`, lavender `#bcb4e8`, cream `#faf2e8`, sage `#b7d5c3`, charcoal `#454352`.
-- Accent motifs: `♡`, `✦`, `✿`, soft divider lines and rounded corners where supported.
-- Compact 80-column layout first; hide ornaments progressively at 60/40 columns.
-- Two modes: `cute` with 1-2 tasteful accents, `compact` with clean ASCII fallback.
-- Preserve WCAG-like contrast; avoid excessive animations and bright background floods.
-- Never affect source code content or logs; styling belongs only in the terminal UI.
+## P1 · cute, responsive skin (v0.2)
 
-## Milestones
+- [x] A single distributable `pi-style-blush` theme
+- [x] Responsive custom Footer, 40–120 column layout and fallback truncation
+- [x] Footer includes current model, Git branch, cache and cost as width allows
+- [x] `/pi-style cute|compact|off|theme`, reset built-in components on off
+- [x] Pure width behavior and theme token tests
+- [ ] Manual contrast/terminal testing across OSes (test matrix below)
 
-### P0 — shipped in v0.1
+## P2 · interactive analytics (v0.2)
 
-- [x] Token and estimated cost in status
-- [x] Live wall-time timer (per agent prompt)
-- [x] Store settled exchanges in session JSONL custom entries
-- [x] `/pi-usage` and `/pi-history` panels
-- [x] Cute and compact status variants
-- [x] Pure helper tests
+- [x] `ctx.ui.custom()` keyboard dashboard with Overview, History, Daily, Projects
+- [x] History sorting by recency/duration/Token; success/abort filtering
+- [x] First-content latency, model message span and tool execution sum
+- [x] Opt-in `/pi-label`, no implicit prompt retention
+- [x] Opt-in JSONL cross-session index, per-project/day aggregates, JSON export
+- [ ] Provider-level billing reconciliation (New API support must have authenticated, read-only API and credentials design)
+- [ ] Optional SQLite backend for very large histories (current JSONL index is lightweight)
+- [ ] Correct attribution when a queued prompt is run inside the same continuous settled run
 
-### P1 — true cute skin, no core changes
+## P3 · personal UI (v0.2)
 
-- [ ] Validate light and dark custom themes against official theme schema
-- [ ] Add two named theme files: `pi-style-blush-dark` / `pi-style-blush-light`
-- [ ] `/pi-style theme` to choose a palette if supported; leave `/settings` as fallback
-- [ ] Adaptive widget width and terminal capability detection
-- [ ] Optional minimalist custom Footer, preserving Pi's built-in fields and restoring it cleanly
-- [ ] Snapshot tests for width=40, 60, 80 and 120 columns
+- [x] Optional kitten startup Header; compact mode restores built-in header
+- [x] Decorative `CustomEditor` marker (stock editing, no remapping)
+- [x] Reduced-motion default and optional tiny footer heartbeat
+- [x] Optional low-noise/collapsed native tool output (`/pi-style quiet`)
+- [x] Feature toggles and restore paths
+- [ ] Manual Windows Terminal / iTerm2 / WezTerm / tmux / SSH contrast and IME verification
+- [ ] RPC/Pi-Web browser implementation (requires changing the separate browser client; terminal component factories cannot render there)
+- [ ] Optional custom builtin tool renderers after real-user acceptance
 
-### P2 — interactive stats and personal dashboard
+## Guardrails
 
-- [ ] `ctx.ui.custom()` keyboard-friendly stats overlay (TUI only)
-- [ ] Sort/filter exchange timings and cache usage
-- [ ] Store explicit task labels only with opt-in (never record raw prompts by default)
-- [ ] Per-project / daily usage aggregation with optional SQLite
-- [ ] New API actual costs through opt-in, authenticated read-only integration
-- [ ] Measure provider latency vs tool execution with separate instrumentation
+1. Extensions affect UI only, never prompts, source code, tool results, API endpoints or permissions.
+2. Per-message usage and cached usage stay separate; cost marked estimate.
+3. Indexing absolute project paths requires explicit `/pi-global on`. Turning off does not destroy prior records.
+4. The custom footer owns its slot while enabled; avoid combining with other footer-replacing extensions.
+5. `/pi-style off` attempts to restore previous theme and editor, not unrelated extension state changes.
+6. Theme and rendered text must truncate safely in narrow terminals.
+7. No false claims that RPC/Pi-Web can render custom terminal components.
 
-### P3 — advanced personal UI
+## Manual test matrix
 
-- [ ] Optional custom header (small ASCII mascot, disable on tiny terminals)
-- [ ] Cute success/failure animation with reduced-motion option
-- [ ] Configurable low-noise tool renderer, no mutation of underlying tool output
-- [ ] Custom editor border / prompt marker using Pi's CustomEditor base
-- [ ] Contrast and accessibility review across Windows Terminal, iTerm2, WezTerm, SSH/tmux
-- [ ] RPC/Pi-Web parity by implementing equivalent UI in the browser client (not by assuming terminal components render in RPC)
+- [ ] Windows Terminal + IME composing Chinese, multiple lines, paste
+- [ ] iTerm2 / WezTerm + emoji display widths
+- [ ] tmux and SSH + 40, 60, 80, 120 columns
+- [ ] Live timer, session switch/resume/tree navigation
+- [ ] Different provider usage schemas, zero-price custom New API
+- [ ] Cross-session indexing opt-in, export, opt-out, corrupt JSONL recovery
 
-## Guardrails and acceptance tests
-
-1. No monkey-patch or fork Pi core; uninstall leaves normal Pi UI unaffected.
-2. Extension must not add significant prompt tokens or change agent behavior.
-3. `agent_settled` (not `agent_end`) marks the end of the measured elapsed time.
-4. Cached token counters remain distinct from plain model input/output.
-5. Force killed/unsettled exchanges are not fabricated; resumed old conversations show existing entries accurately.
-6. Theme/terminal rendering must respect ANSI and double-width Unicode using Pi TUI helpers.
-7. All custom editor work must preserve IME placement, focus propagation and Pi hotkeys.
-8. RPC should degrade to no UI safely when the browser client does not implement the extension UI request.
-
-## Official references
+## References
 
 - https://pi.dev/docs/latest/extensions
 - https://pi.dev/docs/latest/tui

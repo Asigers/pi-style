@@ -1,19 +1,40 @@
 {
   "name": "@asigers/pi-style",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Cute token, cost and exchange timing tracker for Pi Coding Agent",
+  "description": "Single-palette cute TUI and usage analytics for Pi Coding Agent",
   "type": "module",
   "license": "MIT",
-  "keywords": ["pi-package", "pi-coding-agent", "pi-extension", "terminal", "tokens"],
-  "engines": {"node": ">=22"},
+  "keywords": [
+    "pi-package",
+    "pi-coding-agent",
+    "pi-extension",
+    "terminal",
+    "tokens"
+  ],
+  "engines": {
+    "node": ">=22.19.0"
+  },
   "scripts": {
-    "test": "node --experimental-strip-types --test tests/metrics.test.ts tests/extension.test.ts"
+    "test": "node --experimental-strip-types --test tests/metrics.test.ts tests/extension.test.ts tests/ui-layout.test.ts tests/theme.test.ts tests/global-store.test.ts",
+    "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "*"
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
   },
   "pi": {
-    "extensions": ["./extensions/pi-style.ts"]
+    "extensions": [
+      "./extensions/pi-style.ts"
+    ],
+    "themes": [
+      "./themes/pi-style-blush.json"
+    ]
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "1.4.0",
+    "@earendil-works/pi-tui": "1.4.0",
+    "@types/node": "^22.16.0",
+    "typescript": "^5.9.3"
   }
 }

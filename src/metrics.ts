@@ -21,6 +21,12 @@ export interface ExchangeRecord {
   toolCalls: number;
   aborted: boolean;
   firstOutputMs?: number;
+  /** Optional, explicitly provided by /pi-label. */
+  label?: string;
+  /** Assistant message event span time, excludes wait before first event. */
+  modelMs?: number;
+  /** Sum of tool execution durations; may exceed wall time for concurrent tools. */
+  toolMs?: number;
 }
 
 export function emptyUsage(): Usage {
