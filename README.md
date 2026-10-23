@@ -6,7 +6,7 @@ A single-palette **cute terminal skin + usage atelier** for [Pi Coding Agent](ht
 
 ## Screenshot-style preview
 
-\`\`\`text
+```text
        /\       __
       /  \_____/  \__
      / ██  /\  ██   \_
