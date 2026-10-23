@@ -1,7 +1,7 @@
 import { fmtDuration, fmtTokens, type ExchangeRecord, type Usage } from "./metrics.ts";
 
 export type Appearance = "cute" | "compact" | "off";
-export type DashboardTab = "overview" | "history" | "daily";
+export type DashboardTab = "overview" | "history" | "daily" | "projects";
 export type HistorySort = "recent" | "slowest" | "tokens";
 export type HistoryFilter = "all" | "success" | "aborted";
 
@@ -58,6 +58,7 @@ export interface DashboardState {
   page: number;
   usage: Usage;
   exchanges: ExchangeRecord[];
+  globalRecords?: Array<ExchangeRecord & {project:string}>;
   contextPercent?: number | null;
   model: string;
 }
@@ -100,7 +101,7 @@ export function dailyTotals(exchanges: ExchangeRecord[]) {
 export function dashboardLines(width: number, state: DashboardState): string[] {
   if (width < 1) return [];
   const title = "♡ pi-style · usage atelier";
-  const hint = "tab/1-3 view   j/k scroll   s sort   f filter   q/esc exit";
+  const hint = "tab/1-4 view · j/k scroll · s sort · f filter · q/esc exit";
   const rows: string[] = [title, "─".repeat(Math.max(1, Math.min(48, width))), `[1] Overview   [2] History   [3] Daily UTC   (${state.tab})`, ""];
   if (state.tab === "overview") {
     const totalTime = state.exchanges.reduce((sum, e) => sum + e.elapsedMs, 0);
@@ -123,8 +124,8 @@ export function dashboardLines(width: number, state: DashboardState): string[] {
       const label = e.label ? ` · ${e.label}` : "";
       rows.push(`${e.aborted ? "!" : "✓"} ${e.startedAt.slice(5, 16).replace("T", " ")} ${fmtDuration(e.elapsedMs)} ↓${fmtTokens(e.usage.output)} ${e.model}${label}`);
     }
-  } else {
-    const daily = dailyTotals(state.exchanges);
+  } else if(state.tab === "daily") {
+    const daily = dailyTotals(state.globalRecords ?? state.exchanges);
     if (!daily.length) rows.push("No completed exchanges yet.");
     for (const [date, item] of daily.slice(state.page, state.page + 8)) {
       rows.push(`${date}  ${item.count} turns  ${fmtDuration(item.elapsedMs)}  ${fmtTokens(item.usage.output)} out  ~$${item.usage.cost.toFixed(3)}`);
