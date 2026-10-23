@@ -1,24 +1,32 @@
-# pi-style ♡
+# pi-style
 
-A single-palette **cute terminal skin + usage atelier** for [Pi Coding Agent](https://pi.dev).
+A **context-first terminal status bar, Forest Night theme, and local usage dashboard** for [Pi Coding Agent](https://pi.dev).
 
-> v0.2.1 · Blush (dark), local-first · no fork · no model prompt injection.
+> v0.3.0 · Forest Night (dark), one color palette · no prompt injection · local-first.
 
-## Screenshot-style preview
+## Terminal preview
 
-```text
+\`\`\`text
        /\       __
       /  \_____/  \__
      / ██  /\  ██   \_
-    |   ● /  \ ●    |  ♡ pi-style
-    |      ▽        |  ✦ Border Collie
+    |   ● /  \ ●    |  BC / PI
+    |      ▽        |  Border Collie
      \   \____/    /
       \____________/
 
-♡ pi-style · gpt-6 · ↑12.5k ↓1.2k · cache 34.0k/0 · ~$0.120 · ✦ 1m 2s
-```
+CTX 42% 84k/200k │ newapi/gpt-6 │ ↑128k ↓18.6k │ 01:24 │ ~$0.145
 
-Only **one theme** is bundled: `pi-style-blush`. It uses pink/lavender/sage on a dark background. Status/footer simplify automatically for narrow terminals (40/60/80/120 columns).
+# Narrow terminals (< about 50 columns) use at most two footer lines:
+CTX 42% 84k/200k
+newapi/gpt-6
+\`\`\`
+
+The Footer has **no logo, heart or decorative animation**. Its required fields are the **current context window**, **configured provider**, and **full model ID**. Input/output tokens, run time and estimated cost appear when space allows, in that order. If all three required fields cannot fit in one line, Pi uses two; on impossibly narrow terminals very long values are truncated with an ellipsis.
+
+Context usage comes from Pi's \`ctx.getContextUsage()\` (not accumulated session tokens). Unknown usage, such as right after compaction, displays \`CTX --%\`. Provider is Pi's configured model provider; this does not imply detection of the real upstream behind a proxy such as New API.
+
+One bundled theme: \`pi-style-forest\` (charcoal background, restrained sage-green accents, warm amber timer/warning, steel blue secondary details).
 
 ## Install / upgrade
 
@@ -28,26 +36,25 @@ pi install git:github.com/Asigers/pi-style
 pi update git:github.com/Asigers/pi-style
 ```
 
-Restart Pi or use `/reload`. If the theme isn't available on first reload, select `pi-style-blush` in `/settings` and reload.
+Restart Pi or use `/reload`. If the theme is not available immediately after installation, restart Pi or run `/reload`. Theme switching in the extension is in-memory and does not overwrite your configured theme.
 
 For local development:
 
 ```sh
-pi -e ./extensions/pi-style.ts --theme ./themes/pi-style-blush.json
+pi -e ./extensions/pi-style.ts --theme ./themes/pi-style-forest.json
 ```
 
 ## Commands
 
 | Command | Purpose |
 | --- | --- |
-| `/pi-style cute` | Enable Blush theme, optional Border Collie header, footer and input marker |
-| `/pi-style compact` | Compact stats footer, hide header/editor decorations |
+| `/pi-style cute` | Enable Forest Night theme, optional Border Collie header and subtle editor marker |
+| `/pi-style compact` | Keep essential context/provider/model, hide header/editor decorations |
 | `/pi-style off` | Restore built-in header/footer/editor and previous theme; metrics continue |
-| `/pi-style theme` | Select the sole theme (`pi-style-blush`) |
+| `/pi-style theme` | Select the sole theme (`pi-style-forest`) |
 | `/pi-style header on/off` | Show/hide Border Collie startup header |
-| `/pi-style editor on/off` | Show/hide the cute editor border marker |
+| `/pi-style editor on/off` | Show/hide the minimal editor border marker |
 | `/pi-style quiet on/off` | Collapse/restore built-in tool outputs (no tool content changes) |
-| `/pi-style motion on/off` | Animate/reduce footer heart motion (off by default) |
 | `/pi-tui` | Interactive dashboard with four tabs |
 | `/pi-usage` | Quick Token/Cache/Cost widget |
 | `/pi-history` | Last five completed exchanges |
