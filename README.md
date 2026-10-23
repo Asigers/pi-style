@@ -1,81 +1,106 @@
 # pi-style ♡
 
-A small, cute, **local-first** terminal usage tracker for [Pi Coding Agent](https://pi.dev).
+A single-palette **cute terminal skin + usage atelier** for [Pi Coding Agent](https://pi.dev).
 
-## v0.1 features
+> v0.2.0 · Blush (dark), local-first · no fork · no model prompt injection.
 
-- Persistent footer status: input / output tokens, cache read/write, estimated cost, elapsed time.
-- **Wall-clock time per user request** (from `before_agent_start` to `agent_settled`), including model calls, tool work, retries and automatic continuations.
-- A live timer while the agent works, plus optional time-to-first-content.
-- Records each completed exchange as a **custom session entry** in Pi's existing JSONL session file; no database or background service.
-- Two display modes: `cute` (default) and `compact`. Can disable the UI without disabling recording.
-- On-demand summary and recent exchange history through slash commands.
-- No prompt content is stored; only metrics and timestamps.
+## Screenshot-style preview
 
-### Install
+```text
+     /\_/\
+    ( o.o )   ♡ pi-style
+     > ^ <    ✦ small steps, big ideas
 
-Use the package directly from GitHub (Pi 1.0+):
+♡ pi-style · gpt-6 · ↑12.5k ↓1.2k · cache 34.0k/0 · ~$0.120 · ✦ 1m 2s
+```
+
+Only **one theme** is bundled: `pi-style-blush`. It uses pink/lavender/sage on a dark background. Status/footer simplify automatically for narrow terminals (40/60/80/120 columns).
+
+## Install / upgrade
 
 ```sh
 pi install git:github.com/Asigers/pi-style
+# existing installation:
+pi update git:github.com/Asigers/pi-style
 ```
 
-Reload an existing Pi session with `/reload`, or start Pi again.
+Restart Pi or use `/reload`. If the theme isn't available on first reload, select `pi-style-blush` in `/settings` and reload.
 
-For development from a local checkout:
+For local development:
 
 ```sh
-pi -e ./extensions/pi-style.ts
+pi -e ./extensions/pi-style.ts --theme ./themes/pi-style-blush.json
 ```
 
-> The Git installation uses the `pi` manifest in `package.json` to load the extension. The local single-file invocation also resolves `src/metrics.ts` from the checkout.
-
-### Commands
+## Commands
 
 | Command | Purpose |
 | --- | --- |
-| `/pi-style cute` | Soft/cute status bar (default) |
-| `/pi-style compact` | Minimal status bar |
-| `/pi-style off` | Hide the UI (recording continues) |
-| `/pi-usage` | Toggle the detailed usage and context panel |
-| `/pi-history` | Toggle the last five recorded exchanges |
+| `/pi-style cute` | Enable Blush theme, optional kitten header, footer and input marker |
+| `/pi-style compact` | Compact stats footer, hide header/editor decorations |
+| `/pi-style off` | Restore built-in header/footer/editor and previous theme; metrics continue |
+| `/pi-style theme` | Select the sole theme (`pi-style-blush`) |
+| `/pi-style header on/off` | Show/hide kitten startup header |
+| `/pi-style editor on/off` | Show/hide the cute editor border marker |
+| `/pi-style quiet on/off` | Collapse/restore built-in tool outputs (no tool content changes) |
+| `/pi-style motion on/off` | Animate/reduce footer heart motion (off by default) |
+| `/pi-tui` | Interactive dashboard with four tabs |
+| `/pi-usage` | Quick Token/Cache/Cost widget |
+| `/pi-history` | Last five completed exchanges |
+| `/pi-label <text>` | Optional label for *next* conversation; prompt is never stored |
+| `/pi-global on/off/status` | Enable/disable cross-session metrics index (off by default) |
+| `/pi-export` | Export the opt-in index as JSON |
 
-Example:
+### Dashboard keyboard shortcuts
 
-```text
-♡ pi-style · gpt-6 · ↑12.5k ↓1.2k · cache 34.0k/0 · ~$0.1200 · ⏳ 8s
-```
+- **1–4 / Tab / ← →**: Overview, History, Daily (UTC), Projects
+- **j / k or ↑ / ↓**: scroll
+- **s**: sort recent / slowest / tokens (History)
+- **f**: filter all / successful / aborted (History)
+- **q / Esc**: close
 
-The `↑` / `↓` values are model input / output only; cache fields are reported separately. Displayed cost comes from Pi's message usage, **not** the actual New API / provider bill.
+## What it measures
 
-### What “conversation time” means
+Token counts derive from assistant message usage, preserving separate **input / output / cache read / cache write**. Estimated cost comes from Pi's usage metadata, **not the actual New API/provider bill**.
 
-One **exchange** is one submitted user prompt through Pi's normal agent workflow, ending when Pi **settles** (not merely when one model call finishes). The stored `elapsedMs` includes tool execution, retries and compaction performed before settling; it measures wall time, not API latency or human time typing.
+Conversation wall time is measured from `before_agent_start` to `agent_settled`. It includes tools, retries and automatic continuations. Optional telemetry fields `modelMs` and `toolMs` are **not** mutually-exclusive wall-time buckets: model duration observes assistant message span, and concurrent tool durations are summed.
 
-- Session summaries aggregate the **current session tree branch**; navigating to another branch changes the displayed totals.
-- Each successfully settled exchange is stored using `pi.appendEntry("pi-style.exchange", ...)`; `/resume` will retain those records.
-- Previous messages created *before installation* keep their token usage but have no retroactive per-exchange duration.
-- If Pi is force-killed or reloaded before `agent_settled`, the unfinished exchange is not recorded.
-- Queued user messages that Pi processes in one continuous busy interval can be grouped into one timing record.
-- Total session cost is an estimate from Pi usage metadata. Nested tool model calls, summaries, provider accounting, or incorrectly priced custom models may differ.
-- No external analytics, HTTP requests, or file watchers.
+- Each settled exchange is persisted as a `pi-style.exchange` entry inside Pi's session JSONL.
+- Current branch totals follow Pi session-tree navigation, not abandoned sibling branches.
+- A pre-installation conversation has historical token usage but **no retroactive timing records**.
+- Forced termination before settlement produces no completed record.
+- Queued user prompts handled in one continuous agent run can share a single duration record.
+- Optional `/pi-label` records **only** explicitly entered text (max 64 characters).
+- Prompt texts, tool arguments and responses are not copied into the metrics index.
 
-### Development
+## Optional global analytics
+
+Enable with `/pi-global on`. It stores a small JSONL index in:
+
+`~/.pi/agent/pi-style/usage.jsonl`
+
+Records contain timestamps, session ID, **absolute project directory path**, model, counters, costs, duration and optional label. This remains local; no uploads, HTTP, background processes or credentials.
+
+`/pi-global off` stops future indexing, **does not delete existing data**. Export with `/pi-export` to the same directory. Dashboard Daily/Projects use that index when enabled; otherwise Daily shows current branch only.
+
+## Compatibility and limitations
+
+Designed against the latest `@earendil-works/pi-coding-agent` API. Component factories run **only in TUI mode**; RPC/Pi-Web needs its own browser rendering. Header replacement hides Pi's default startup hints; `/pi-style compact` restores them. The custom footer can conflict with other extensions that also replace the footer, and manual theme changes during a session are not continuously monitored.
+
+CuteEditor subclasses the built-in `CustomEditor`, calling the stock editing logic and only decorating the bottom border; normal shortcuts and IME processing are intentionally unchanged.
+
+One theme is packaged. There is no browser/CSS layout, no actual provider billing reconciliation, no SQLite database, and no universal transcript re-skin. This repository is not a fork.
+
+## Development
 
 ```sh
 npm test
 ```
 
-Tests use Node 22+ built-in TypeScript stripping and the test runner. No runtime npm dependency is required.
+Tests cover usage aggregation, session lifecycle, responsive layout, history sorting/filtering, theme completeness, and optional global index aggregation. Manual end-to-end testing on Windows Terminal, tmux/SSH and Pi-Web is still recommended.
 
-### Compatibility
+See [ROADMAP.md](docs/ROADMAP.md) for feature status and remaining tasks.
 
-Targets the current `@earendil-works/pi-coding-agent` Extension API (Pi 1.0+). Older Pi releases may have different event semantics. Interactive terminal mode displays status/widgets; RPC front ends such as Pi-Web may ignore those UI requests unless they implement the extension UI protocol.
-
-### Roadmap
-
-See [docs/ROADMAP.md](docs/ROADMAP.md) for the cute TUI plan and compatibility boundary. This package intentionally does **not** replace Pi's core editor, footer or terminal renderer yet.
-
-### License
+## License
 
 MIT.
