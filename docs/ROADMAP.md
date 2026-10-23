@@ -13,16 +13,17 @@ Pi public APIs are used throughout: `setTheme`, `setHeader`, `setFooter`, `setEd
 - [x] Exchange entries persisted to Pi session JSONL
 - [x] `/pi-usage`, `/pi-history` widgets
 
-## P1 · cute, responsive skin (v0.2)
+## P1 · cute, responsive skin (v0.2.1)
 
 - [x] A single distributable `pi-style-blush` theme
 - [x] Responsive custom Footer, 40–120 column layout and fallback truncation
 - [x] Footer includes current model, Git branch, cache and cost as width allows
 - [x] `/pi-style cute|compact|off|theme`, reset built-in components on off
 - [x] Pure width behavior and theme token tests
+- [x] In-memory theme switching and prior theme restore without persisted setting side effects
 - [ ] Manual contrast/terminal testing across OSes (test matrix below)
 
-## P2 · interactive analytics (v0.2)
+## P2 · interactive analytics (v0.2.1)
 
 - [x] `ctx.ui.custom()` keyboard dashboard with Overview, History, Daily, Projects
 - [x] History sorting by recency/duration/Token; success/abort filtering
@@ -31,7 +32,9 @@ Pi public APIs are used throughout: `setTheme`, `setHeader`, `setFooter`, `setEd
 - [x] Opt-in JSONL cross-session index, per-project/day aggregates, JSON export
 - [ ] Provider-level billing reconciliation (New API support must have authenticated, read-only API and credentials design)
 - [ ] Optional SQLite backend for very large histories (current JSONL index is lightweight)
-- [ ] Correct attribution when a queued prompt is run inside the same continuous settled run
+- [x] Segmented queued user-message records with explicit shared-run attribution, no invented queue wait
+- [x] Tool/summary/compaction/standalone usage ledger accounting
+- [x] Cached session stats by session ID and leaf
 
 ## P3 · personal UI (v0.2)
 
@@ -40,6 +43,7 @@ Pi public APIs are used throughout: `setTheme`, `setHeader`, `setFooter`, `setEd
 - [x] Reduced-motion default and optional tiny footer heartbeat
 - [x] Optional low-noise/collapsed native tool output (`/pi-style quiet`)
 - [x] Feature toggles and restore paths
+- [x] TUI mock runtime and queued-message regression tests
 - [ ] Manual Windows Terminal / iTerm2 / WezTerm / tmux / SSH contrast and IME verification
 - [ ] RPC/Pi-Web browser implementation (requires changing the separate browser client; terminal component factories cannot render there)
 - [ ] Optional custom builtin tool renderers after real-user acceptance
