@@ -15,10 +15,10 @@ A **context-first terminal status bar, Forest Night theme, and local usage dashb
      \   \____/    /
       \____________/
 
-CTX 42% 84k/200k │ newapi/gpt-6 │ ↑128k ↓18.6k │ 01:24 │ ~$0.145
+CTX 42.0% 84k/200k │ newapi/gpt-6 │ ↑128k ↓18.6k │ 01:24 │ ~$0.145
 
 # Narrow terminals use at most two footer lines:
-CTX 42% 84k/200k
+CTX 42.0% 84k/200k
 newapi/gpt-6
 ```
 
