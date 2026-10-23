@@ -73,7 +73,8 @@ test("records one settled exchange including usage and timing, and restores hist
 
   await send("session_start", { reason: "resume" });
   await commands.get("pi-usage")!.handler("", ctx);
-  assert.ok(statuses.at(-1)?.includes("↑12"));
+  assert.ok(statuses.at(-1)?.includes("性能排查"));
+  assert.ok(!statuses.at(-1)?.includes("↑12"));
 
   const callsBefore = getBranchCalls;
   await commands.get("pi-usage")!.handler("", ctx);
