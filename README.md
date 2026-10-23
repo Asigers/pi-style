@@ -6,7 +6,7 @@ A **context-first terminal status bar, Forest Night theme, and local usage dashb
 
 ## Terminal preview
 
-\`\`\`text
+```text
        /\       __
       /  \_____/  \__
      / ██  /\  ██   \_
@@ -17,16 +17,16 @@ A **context-first terminal status bar, Forest Night theme, and local usage dashb
 
 CTX 42% 84k/200k │ newapi/gpt-6 │ ↑128k ↓18.6k │ 01:24 │ ~$0.145
 
-# Narrow terminals (< about 50 columns) use at most two footer lines:
+# Narrow terminals use at most two footer lines:
 CTX 42% 84k/200k
 newapi/gpt-6
-\`\`\`
+```
 
 The Footer has **no logo, heart or decorative animation**. Its required fields are the **current context window**, **configured provider**, and **full model ID**. Input/output tokens, run time and estimated cost appear when space allows, in that order. If all three required fields cannot fit in one line, Pi uses two; on impossibly narrow terminals very long values are truncated with an ellipsis.
 
-Context usage comes from Pi's \`ctx.getContextUsage()\` (not accumulated session tokens). Unknown usage, such as right after compaction, displays \`CTX --%\`. Provider is Pi's configured model provider; this does not imply detection of the real upstream behind a proxy such as New API.
+Context usage comes from Pi's `ctx.getContextUsage()` (not accumulated session tokens). Unknown usage, such as right after compaction, displays `CTX --%`. Provider is Pi's configured model provider; this does not imply detection of the real upstream behind a proxy such as New API.
 
-One bundled theme: \`pi-style-forest\` (charcoal background, restrained sage-green accents, warm amber timer/warning, steel blue secondary details).
+One bundled theme: `pi-style-forest` (charcoal background, restrained sage-green accents, warm amber timer/warning, steel blue secondary details).
 
 ## Install / upgrade
 
@@ -36,7 +36,7 @@ pi install git:github.com/Asigers/pi-style
 pi update git:github.com/Asigers/pi-style
 ```
 
-Restart Pi or use `/reload`. If the theme is not available immediately after installation, restart Pi or run `/reload`. Theme switching in the extension is in-memory and does not overwrite your configured theme.
+After installation, restart Pi or run `/reload`. Theme switching in the extension is in-memory and does not overwrite your configured theme.
 
 For local development:
 
