@@ -56,8 +56,8 @@ export function footerLines(width: number, state: FooterState): string[] {
   // Only use explicit /name titles; never generate titles from prompts, paths or IDs.
   // Session names are user-controlled, so strip control sequences and newlines.
   const rawTitle = (state.sessionTitle ?? "")
-    .replace(/\\x1b\\[[0-?]*[ -/]*[@-~]/g, "")
-    .replace(/[\\x00-\\x1f\\x7f-\\x9f]/g, " ")
+    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "")
+    .replace(/[\x00-\x1f\x7f-\x9f]/g, " ")
     .trim();
   const title = rawTitle ? safe(rawTitle, Math.min(36, width)) : undefined;
   const duration = state.elapsedMs === undefined ? undefined : clock(state.elapsedMs);
