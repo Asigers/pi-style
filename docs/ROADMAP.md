@@ -1,8 +1,8 @@
-# pi-style roadmap · one Blush palette 🧁
+# pi-style roadmap · Forest Night
 
 ## Design
 
-One dark `pi-style-blush` theme only. Colors: pink `#f5aeca`, lavender `#c7b6ee`, sage `#a6d8c0`, background `#231e2b`. The terminal remains readable and dense, rather than filling the screen with emoji.
+One dark `pi-style-forest` theme. Colors: background `#141C23`, green `#86C9B4`, amber `#D7B778`, slate blue `#738EAC`, light text `#E7EDF0`. No pink, hearts, logo or animation in the Footer.
 
 Pi public APIs are used throughout: `setTheme`, `setHeader`, `setFooter`, `setEditorComponent`, `setWidget`, `ctx.ui.custom`. No fork or patch of Pi core.
 
@@ -13,13 +13,13 @@ Pi public APIs are used throughout: `setTheme`, `setHeader`, `setFooter`, `setEd
 - [x] Exchange entries persisted to Pi session JSONL
 - [x] `/pi-usage`, `/pi-history` widgets
 
-## P1 · cute, responsive skin (v0.2.1)
+## P1 · responsive Forest Night skin (v0.3.0)
 
-- [x] A single distributable `pi-style-blush` theme
+- [x] A single distributable `pi-style-forest` theme
 - [x] Responsive custom Footer, 40–120 column layout and fallback truncation
-- [x] Footer includes current model, Git branch, cache and cost as width allows
+- [x] Footer guarantees context usage, configured Provider and model first; shows Token, duration and cost when space allows
 - [x] `/pi-style cute|compact|off|theme`, reset built-in components on off
-- [x] Pure width behavior and theme token tests
+- [x] Width-aware one/two line behavior, CJK width safety, unknown context and theme token tests
 - [x] In-memory theme switching and prior theme restore without persisted setting side effects
 - [ ] Manual contrast/terminal testing across OSes (test matrix below)
 
@@ -36,11 +36,11 @@ Pi public APIs are used throughout: `setTheme`, `setHeader`, `setFooter`, `setEd
 - [x] Tool/summary/compaction/standalone usage ledger accounting
 - [x] Cached session stats by session ID and leaf
 
-## P3 · personal UI (v0.2)
+## P3 · personal UI (v0.3.0)
 
 - [x] Optional Border Collie startup Header; compact mode restores built-in header
 - [x] Decorative `CustomEditor` marker (stock editing, no remapping)
-- [x] Reduced-motion default and optional tiny footer heartbeat
+- [x] Remove footer motion, hearts and decorative branding
 - [x] Optional low-noise/collapsed native tool output (`/pi-style quiet`)
 - [x] Feature toggles and restore paths
 - [x] TUI mock runtime and queued-message regression tests
