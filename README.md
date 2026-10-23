@@ -2,7 +2,7 @@
 
 A **context-first terminal status bar, Forest Night theme, and local usage dashboard** for [Pi Coding Agent](https://pi.dev).
 
-> v0.3.2 · Forest Night (dark), one color palette · no prompt injection · local-first.
+> v0.3.3 · Forest Night (dark), one color palette · no prompt injection · local-first.
 
 ## Terminal preview
 
@@ -15,14 +15,14 @@ A **context-first terminal status bar, Forest Night theme, and local usage dashb
      \   \____/    /
       \____________/
 
-CTX 42.0% 84k/200k │ newapi/gpt-6 │ 修复 Django 慢查询 │ 01:24 │ ~$0.145
+CTX 42.0% 84k/200k │ newapi/gpt-6 │ THINK high │ 修复 Django 慢查询 │ 01:24 │ ~$0.145
 
 # Narrow terminals use at most two footer lines:
-CTX 42.0% 84k/200k
+CTX 42.0% 84k/200k │ THINK high
 newapi/gpt-6
 ```
 
-The Footer has **no logo, heart, decorative animation or cumulative input/output Token counters**. Its required fields are the **current context window**, **configured provider**, and **full model ID**. An explicit name from Pi's `/name` command appears when set; run duration and estimated cost follow when space allows. Input/output and cache totals remain available in `/pi-tui` and `/pi-usage`. If all three required fields cannot fit in one line, Pi uses two; on impossibly narrow terminals very long values are truncated with an ellipsis.
+The Footer has **no logo, heart, decorative animation or cumulative input/output Token counters**. Its required fields are the **current context window**, **configured provider**, **full model ID**, and **effective thinking depth**. The thinking level is read from Pi's `ctx.thinkingLevel` and updates immediately on `thinking_level_select` (including `off`, `high`, `xhigh`). An explicit name from Pi's `/name` command appears when set; run duration and estimated cost follow when space allows. Input/output and cache totals remain available in `/pi-tui` and `/pi-usage`. If all three required fields cannot fit in one line, Pi uses two; on impossibly narrow terminals very long values are truncated with an ellipsis.
 
 Context usage comes from Pi's `ctx.getContextUsage()` (not accumulated session tokens). Unknown usage, such as right after compaction, displays `CTX --%`. Provider is Pi's configured model provider; this does not imply detection of the real upstream behind a proxy such as New API.
 
