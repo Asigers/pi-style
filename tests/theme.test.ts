@@ -2,10 +2,11 @@ import { test } from "node:test";
 import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
 
-test("a single dark Blush theme uses all upstream required color tokens", () => {
-  const theme=JSON.parse(readFileSync(new URL("../themes/pi-style-blush.json",import.meta.url),"utf8"));
-  assert.equal(theme.name,"pi-style-blush");
+test("a single dark Forest Night theme uses all upstream required color tokens", () => {
+  const theme=JSON.parse(readFileSync(new URL("../themes/pi-style-forest.json",import.meta.url),"utf8"));
+  assert.equal(theme.name,"pi-style-forest");
   assert.equal(theme.appearance,"dark");
+  assert.ok(!JSON.stringify(theme).match(/#f5aeca|#c7b6ee|pink|lavender|blush/i));
   const required=[
     "accent","border","borderAccent","borderMuted","success","error","warning","muted","dim","text",
     "thinkingText","selectedBg","userMessageBg","userMessageText","customMessageBg",
@@ -26,5 +27,5 @@ test("a single dark Blush theme uses all upstream required color tokens", () => 
 
 test("Pi package manifests exactly one theme", () => {
   const packageJson=JSON.parse(readFileSync(new URL("../package.json",import.meta.url),"utf8"));
-  assert.deepEqual(packageJson.pi.themes,["./themes/pi-style-blush.json"]);
+  assert.deepEqual(packageJson.pi.themes,["./themes/pi-style-forest.json"]);
 });
