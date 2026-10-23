@@ -78,7 +78,7 @@ test("real TUI UI API paths restore original theme without persisting settings",
       await new Promise<void>((done)=>{
         const component=factory(fakeTui,theme,{},done);
         const rendered=component.render(80);
-        assert.ok(rendered.join("\\n").includes("pi-style"));
+        assert.ok(rendered.join("\\n").includes("USAGE / OVERVIEW"));
         modalRenderCount++;
         component.handleInput("2");
         component.render(80);
