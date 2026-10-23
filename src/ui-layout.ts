@@ -7,50 +7,109 @@ export type HistoryFilter = "all" | "success" | "aborted";
 
 export interface FooterState {
   appearance: Appearance;
+  provider: string;
   model: string;
-  branch?: string | null;
+  /** Estimated current context use from Pi. Null/undefined means unknown. */
+  contextPercent?: number | null;
+  contextTokens?: number | null;
+  contextWindow?: number | null;
   usage: Usage;
   elapsedMs?: number;
   running: boolean;
-  exchanges: number;
-  otherStatuses?: string[];
-  motionFrame?: number;
 }
 
+/** Rendered screen width, not JavaScript string length (CJK, Unicode and ANSI-safe). */
+import { visibleWidth, truncateToWidth } from "@earendil-works/pi-tui";
+
+const sep = " │ ";
+const fits = (text: string, width: number) => visibleWidth(text) <= width;
+const safe = (text: string, width: number) => truncateToWidth(text, Math.max(1, width), "…");
+const shortTokens = (n: number) => fmtTokens(n).replace(/\.0(?=[km]$)/, "");
+
+function clock(ms: number): string {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  const hh = Math.floor(seconds / 3600);
+  const mm = Math.floor(seconds / 60) % 60;
+  const ss = seconds % 60;
+  return hh ? [hh, mm, ss].map((n, i) => i ? String(n).padStart(2, "0") : String(n)).join(":")
+    : String(Math.floor(seconds / 60)).padStart(2, "0") + ":" + String(ss).padStart(2, "0");
+}
+
+export function footerLines(width: number, state: FooterState): string[] {
+  if (width < 1 || state.appearance === "off") return [];
+  const known = typeof state.contextPercent === "number" && Number.isFinite(state.contextPercent)
+    && state.contextPercent >= 0;
+  const percent = known ? Math.round(state.contextPercent!) + "%" : "--%";
+  const ctx = "CTX " + percent;
+  const hasTokens = typeof state.contextTokens === "number" && Number.isFinite(state.contextTokens)
+    && state.contextTokens >= 0;
+  const hasWindow = typeof state.contextWindow === "number" && Number.isFinite(state.contextWindow)
+    && state.contextWindow > 0;
+  const ctxFull = hasTokens && hasWindow
+    ? ctx + " " + shortTokens(state.contextTokens!) + "/" + shortTokens(state.contextWindow!)
+    : ctx;
+  const provider = state.provider.trim() || "unknown-provider";
+  const model = state.model.trim() || "unknown-model";
+  const identity = provider + "/" + model;
+  const tokens = "↑" + shortTokens(state.usage.input) + " ↓" + shortTokens(state.usage.output);
+  const duration = state.elapsedMs === undefined ? undefined : clock(state.elapsedMs);
+  const cost = "~$" + state.usage.cost.toFixed(3);
+  const extras = [tokens, duration, cost].filter((v): v is string => !!v);
+
+  // Keep all data on one line whenever it fits. When it does not, progressively
+  // drop *optional* items (cost first, then clock, then token tally).
+  const make = (context: string, optional: string[]) => [context, identity, ...optional].join(sep);
+  // In narrow terminals the core is intentionally split across two lines,
+  // even if removing every optional field could squeeze it into one.
+  if (width >= 50) {
+    if (fits(make(ctxFull, extras), width)) return [make(ctxFull, extras)];
+    if (fits(make(ctx, extras), width)) return [make(ctx, extras)];
+    for (let count = extras.length - 1; count >= 0; count--) {
+      if (fits(make(ctx, extras.slice(0, count)), width)) return [make(ctx, extras.slice(0, count))];
+    }
+  }
+
+  // Core data cannot fit together: use at most two lines, retaining the full
+  // provider and model where physically possible. Never drop CTX or identity.
+  if (fits(identity, width)) {
+    const firstParts = [ctxFull, ...extras];
+    while (firstParts.length > 1 && !fits(firstParts.join(sep), width)) firstParts.pop();
+    if (!fits(firstParts[0]!, width)) firstParts[0] = ctx;
+    return [safe(firstParts.join(sep), width), identity];
+  }
+
+  // Long identity: move the provider alongside context and give the model the
+  // second line. This avoids cutting long model IDs at 40-60 columns.
+  const providerLine = ctx + sep + provider;
+  if (fits(providerLine, width)) {
+    const line2 = [model];
+    for (const item of extras) {
+      if (fits([...line2, item].join(sep), width)) line2.push(item);
+      else break;
+    }
+    return [providerLine, safe(line2.join(sep), width)];
+  }
+
+  // Extremely narrow terminals / very long provider names cannot display
+  // all of three mandatory values in two lines. Truncate as a last resort.
+  return [safe(ctx, width), safe(identity, width)];
+}
+
+/** Compatibility for RPC status, which accepts a single line only. */
 export function footerText(width: number, state: FooterState): string {
-  if (width < 1 || state.appearance === "off") return "";
-  const cute = state.appearance === "cute";
-  const heart = cute ? (state.motionFrame === 1 ? "♥" : "♡") : "";
-  const arrow = cute ? "✦" : "*";
-  const elapsed = state.elapsedMs === undefined ? "—" : fmtDuration(state.elapsedMs);
-  const tokens = `↑${fmtTokens(state.usage.input)} ↓${fmtTokens(state.usage.output)}`;
-  const cost = `~$${state.usage.cost.toFixed(3)}`;
-  const clock = `${state.running ? arrow : "✓"} ${elapsed}`;
-  const model = state.model || "no-model";
-  const brand = cute ? `${heart} pi-style` : "pi-style";
-  let sections: string[];
-  if (width < 32) sections = [tokens, clock];
-  else if (width < 55) sections = [cute ? heart : "pi", tokens, clock];
-  else if (width < 85) sections = [brand, model, tokens, cost, clock];
-  else sections = [brand, model, tokens, `cache ${fmtTokens(state.usage.cacheRead)}/${fmtTokens(state.usage.cacheWrite)}`, cost, clock];
-  if (width >= 105 && state.branch) sections.splice(2, 0, `⑂ ${state.branch}`);
-  if (width >= 130) sections.push(`n=${state.exchanges}`);
-  const other = state.otherStatuses?.filter(Boolean).join(" · ");
-  if (width >= 150 && other) sections.push(other);
-  return sections.join(" · ");
+  return footerLines(width, state)[0] ?? "";
 }
 
 export function headerLines(width: number): string[] {
   if (width < 32) return [];
-  if (width < 58) return ["  ♡ pi-style", "  ✦ Border Collie"];
-  // A one-floppy-ear Border Collie with dark eye patches and a white blaze.
-  // Keep the artwork plain text; Pi's caller truncates to terminal width.
+  if (width < 58) return ["  BC / PI", "  Border Collie"];
+  // A one-floppy-ear Border Collie, black eye patches and a white blaze.
   return [
     "       /\\       __",
     "      /  \\_____/  \\__",
     "     / ██  /\\  ██   \\_",
-    "    |   ● /  \\ ●    |  ♡ pi-style",
-    "    |      ▽        |  ✦ Border Collie",
+    "    |   ● /  \\ ●    |  BC / PI",
+    "    |      ▽        |  Border Collie",
     "     \\   \\____/    /",
     "      \\____________/",
     "",
@@ -106,7 +165,7 @@ export function dailyTotals(exchanges: ExchangeRecord[]) {
 
 export function dashboardLines(width: number, state: DashboardState): string[] {
   if (width < 1) return [];
-  const title = "♡ pi-style · usage atelier";
+  const title = "USAGE / " + state.tab.toUpperCase();
   const hint = "tab/1-4 view · j/k scroll · s sort · f filter · q/esc exit";
   const rows: string[] = [title, "─".repeat(Math.max(1, Math.min(48, width))), `[1] Overview   [2] History   [3] Daily UTC   [4] Projects   (${state.tab})`, ""];
   if (state.tab === "overview") {

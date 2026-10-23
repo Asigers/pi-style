@@ -1,33 +1,70 @@
 import { test } from "node:test";
 import { strict as assert } from "node:assert";
 import {
-  footerText, headerLines, dashboardLines, filteredHistory, dailyTotals,
+  footerText, footerLines, headerLines, dashboardLines, filteredHistory, dailyTotals,
   type FooterState, type DashboardState,
 } from "../src/ui-layout.ts";
 import { emptyUsage, type ExchangeRecord } from "../src/metrics.ts";
+import { visibleWidth } from "@earendil-works/pi-tui";
 
 const base: FooterState = {
-  appearance: "cute", model:"some-very-long-gpt-model-name-1234567", branch:"feature/abc",
-  usage:{input:2450,output:1520,cacheRead:16000,cacheWrite:320,cost:0.145},
-  running:true,elapsedMs:63000,exchanges:10,otherStatuses:["other plugin"],
+  appearance:"cute", provider:"newapi", model:"gpt-6-long-context", 
+  contextPercent:42, contextTokens:84000, contextWindow:200000,
+  usage:{input:128000,output:18600,cacheRead:16000,cacheWrite:320,cost:0.145},
+  running:true,elapsedMs:84000,
 };
 
-test("responsive status progressively loses ornaments and detail", () => {
-  const narrow=footerText(28,base), medium=footerText(62,base),wide=footerText(180,base);
-  assert.ok(narrow.includes("↑2.5k"));
-  assert.ok(!narrow.includes("pi-style"));
-  assert.ok(medium.includes("pi-style") && medium.includes("~$"));
-  assert.ok(!medium.includes("cache"));
-  assert.ok(wide.includes("cache") && wide.includes("feature/abc"));
-  assert.ok(wide.includes("other plugin"));
-  assert.equal(footerText(50,{...base,appearance:"off"}),"");
+test("width-aware context-first footer keeps provider and model, removing low-priority data", () => {
+  for(const width of [120,100,80,60,45,40,32,28,18]) {
+    const lines=footerLines(width,base);
+    assert.ok(lines.length>=1 && lines.length<=2);
+    assert.ok(lines.some(x=>x.includes("CTX")),"mandatory context missing at "+width);
+    assert.ok(lines.some(x=>x.includes("newapi")),"provider missing at "+width);
+    if(width>=18) assert.ok(lines.some(x=>x.includes("gpt-6")),"model missing at "+width);
+    for(const line of lines) assert.ok(visibleWidth(line)<=width, `overflow at ${width}: ${line}`);
+    assert.ok(!lines.join("").includes("pi-style"));
+    assert.ok(!/[♡♥]/.test(lines.join("")));
+  }
+  assert.equal(footerLines(120,base).length,1);
+  assert.ok(footerLines(120,base)[0]?.includes("84k/200k"));
+  assert.ok(footerLines(120,base)[0]?.includes("↑128k ↓18.6k"));
+  assert.ok(footerLines(120,base)[0]?.includes("01:24"));
+  assert.ok(footerLines(120,base)[0]?.includes("~$0.145"));
+  assert.equal(footerLines(40,base).length,2);
+  assert.ok(!footerLines(40,base).join("").includes("~$"));
+  assert.equal(footerText(120,{...base,appearance:"off"}),"");
+  assert.deepEqual(footerLines(120,{...base,appearance:"off"}),[]);
+});
+
+test("unknown or post-compaction context never claims 0%", () => {
+  const lines=footerLines(120,{...base,contextPercent:null,contextTokens:null});
+  assert.ok(lines[0]?.includes("CTX --%"));
+  assert.ok(!lines.join("").includes("CTX 0%"));
+  assert.ok(lines.join(" ").includes("newapi/gpt-6-long-context"));
+});
+
+test("long provider/model and CJK names safely fit into at most two lines", () => {
+  const state={...base,provider:"custom-newapi-provider",model:"gpt-6-long-context-experimental-with-very-extended-id"};
+  for(const width of [40,60,80]) {
+    const lines=footerLines(width,state);
+    assert.ok(lines.length<=2);
+    for(const line of lines) assert.ok(visibleWidth(line)<=width);
+    assert.ok(lines.join("").includes("CTX"));
+    assert.ok(lines.join("").includes("custom-newapi-provider"));
+    assert.ok(lines.join("").includes("gpt-6"));
+  }
+  const cjk=footerLines(40,{...base,provider:"自建网关",model:"模型-六-长上下文"});
+  assert.ok(cjk.every(x=>visibleWidth(x)<=40));
+  assert.ok(cjk.join("").includes("自建网关"));
+  assert.ok(cjk.join("").includes("模型-六"));
+});
+
+test("border collie header has no heart symbols", () => {
   assert.deepEqual(headerLines(20),[]);
   assert.equal(headerLines(44).length,2);
-  assert.ok(headerLines(80).length>=3);
   assert.ok(headerLines(80).some(line=>line.includes("Border Collie")));
   assert.ok(headerLines(80).some(line=>line.includes("██")));
-  assert.ok(headerLines(44).some(line=>line.includes("Border Collie")));
-  assert.ok(!headerLines(80).join("\\n").includes("o.o"));
+  assert.ok(!/[♡♥]/.test(headerLines(80).join("")));
 });
 
 function sample(date:string,elapsedMs:number,output:number,aborted=false):ExchangeRecord {

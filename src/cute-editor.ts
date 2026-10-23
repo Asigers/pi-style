@@ -10,7 +10,7 @@ export class CuteEditor extends CustomEditor {
     const lines = super.render(width);
     if (width < 30 || lines.length === 0) return lines;
     const last = lines.length - 1;
-    const label = width >= 55 ? " ♡ ready " : " ♡ ";
+    const label = width >= 55 ? " │ " : " │ ";
     const space = Math.max(0, width - visibleWidth(label));
     lines[last] = truncateToWidth(lines[last] ?? "", space, "") + label;
     return lines;

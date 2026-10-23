@@ -41,7 +41,7 @@ test("cache uses leaf and session identity; no repeated history walk on redraw",
 test("real TUI UI API paths restore original theme without persisting settings", async () => {
   let currentTheme={name:"system"} as {name:string};
   const originalTheme=currentTheme;
-  const blush={name:"pi-style-blush"};
+  const forest={name:"pi-style-forest"};
   const writes:unknown[]=[];
   let footer:Function|undefined;
   let header:Function|undefined;
@@ -59,7 +59,7 @@ test("real TUI UI API paths restore original theme without persisting settings",
   };
   const ui={
     get theme(){return currentTheme;},
-    getTheme:(name:string)=>name==="pi-style-blush"?blush:undefined,
+    getTheme:(name:string)=>name==="pi-style-forest"?forest:undefined,
     setTheme:(value:string|{name:string})=>{
       if(typeof value === "string") writes.push(value);
       else currentTheme=value;
@@ -78,7 +78,7 @@ test("real TUI UI API paths restore original theme without persisting settings",
       await new Promise<void>((done)=>{
         const component=factory(fakeTui,theme,{},done);
         const rendered=component.render(80);
-        assert.ok(rendered.join("\\n").includes("pi-style"));
+        assert.ok(rendered.join("\\n").includes("USAGE / OVERVIEW"));
         modalRenderCount++;
         component.handleInput("2");
         component.render(80);
@@ -104,7 +104,7 @@ test("real TUI UI API paths restore original theme without persisting settings",
   };
   createExtension(pi as never);
   await events.get("session_start")!({},ctx);
-  assert.equal(currentTheme,blush);
+  assert.equal(currentTheme,forest);
   assert.ok(footer && header && editor);
   assert.equal(writes.length,0,"in-memory theme must never write settings.json");
   const component=footer!(fakeTui,theme,{
@@ -125,7 +125,7 @@ test("real TUI UI API paths restore original theme without persisting settings",
   assert.equal(writes.length,0);
 
   await commands.get("pi-style")!.handler("cute",ctx);
-  assert.equal(currentTheme,blush);
+  assert.equal(currentTheme,forest);
   assert.equal(writes.length,0);
   await commands.get("pi-style")!.handler("theme",ctx);
   assert.equal(writes.length,0,"explicit theme command must not persist settings");
@@ -134,7 +134,7 @@ test("real TUI UI API paths restore original theme without persisting settings",
   await events.get("session_start")!({reason:"resume"},ctx);
   currentTheme=originalTheme; // simulate Pi's trailing applyFromSettings()
   await new Promise(resolve=>setTimeout(resolve,15));
-  assert.equal(currentTheme,blush,"theme is re-applied after resume");
+  assert.equal(currentTheme,forest,"theme is re-applied after resume");
   await commands.get("pi-style")!.handler("off",ctx);
   assert.equal(currentTheme,originalTheme,"turning off after resume restores original");
   assert.equal(writes.length,0);

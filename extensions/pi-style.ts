@@ -7,7 +7,7 @@ import {
   type ExchangeRecord, type Usage,
 } from "../src/metrics.ts";
 import {
-  dashboardLines, filteredHistory, footerText, headerLines,
+  dashboardLines, filteredHistory, footerLines, footerText, headerLines,
   type Appearance, type DashboardState, type DashboardTab,
   type HistoryFilter, type HistorySort,
 } from "../src/ui-layout.ts";
@@ -41,7 +41,7 @@ interface ActiveExchange {
 }
 
 const KEY = "pi-style";
-const THEME = "pi-style-blush";
+const THEME = "pi-style-forest";
 const money = (cost: number) => `~$${cost.toFixed(4)}`;
 
 export default function(pi: ExtensionAPI) {
@@ -59,12 +59,10 @@ export default function(pi: ExtensionAPI) {
   let editorCaptured = false;
   let originalTheme: Theme | undefined;
   const statsCache = new SessionStatsCache();
-  let motion = false; // reduced motion by default
   let showHeader = true;
   let showEditor = true;
   let quiet = false;
   let originalToolsExpanded: boolean | undefined;
-  let frame = 0;
   let nextLabel: string | undefined;
   let globalTracking = false;
   let themeReapplyTimer: ReturnType<typeof setTimeout> | undefined;
@@ -102,9 +100,12 @@ export default function(pi: ExtensionAPI) {
     const usage = effectiveUsage();
     if(!footerInstalled) {
       ctx.ui.setStatus(KEY, footerText(100, {
-        appearance, model: ctx.model?.id ?? active?.model ?? "unknown", usage,
-        elapsedMs: durationMs(), running: !!active, exchanges: exchanges.length,
-        motionFrame: motion ? frame % 2 : 0,
+        appearance, provider: ctx.model?.provider ?? "unknown-provider",
+        model: ctx.model?.id ?? active?.model ?? "unknown-model",
+        contextPercent: ctx.getContextUsage()?.percent,
+        contextTokens: ctx.getContextUsage()?.tokens,
+        contextWindow: ctx.getContextUsage()?.contextWindow,
+        usage, elapsedMs: durationMs(), running: !!active,
       }));
     } else {
       ctx.ui.setStatus(KEY, undefined);
@@ -119,7 +120,7 @@ export default function(pi: ExtensionAPI) {
       const context = ctx.getContextUsage();
       const pct = typeof context?.percent === "number" ? `${context.percent.toFixed(1)}%` : "N/A";
       ctx.ui.setWidget(KEY, [
-        "✦ pi-style / current branch ✦",
+        "USAGE / CURRENT BRANCH",
         `  Input      ${usage.input.toLocaleString()}   Output      ${usage.output.toLocaleString()}`,
         `  Cache read ${usage.cacheRead.toLocaleString()}   Cache write ${usage.cacheWrite.toLocaleString()}`,
         `  Est. cost  ${money(usage.cost)}   Context ${pct}`,
@@ -129,7 +130,7 @@ export default function(pi: ExtensionAPI) {
     } else {
       const recent = exchanges.slice(-5).reverse();
       ctx.ui.setWidget(KEY, [
-        "✿ pi-style / recent exchanges",
+        "HISTORY / RECENT",
         ...recent.map(e => `  ${e.aborted ? "!" : "✓"} ${e.startedAt.slice(5,16).replace("T", " ")} ${fmtDuration(e.elapsedMs)} ↓${fmtTokens(e.usage.output)} ${e.model.slice(0,22)}`),
         recent.length ? "  Wall time includes tool calls and retries" : "  No completed exchanges",
         "  /pi-history hides this panel",
@@ -157,10 +158,10 @@ export default function(pi: ExtensionAPI) {
     // Apply theme instances, not names: setTheme("name") persists into settings.json.
     // The in-memory path keeps the user's configured theme intact across restarts.
     if(ctx.ui.theme.name !== THEME) {
-      const blush = ctx.ui.getTheme(THEME);
-      if(blush) {
+      const forest = ctx.ui.getTheme(THEME);
+      if(forest) {
         originalTheme ??= ctx.ui.theme;
-        const result = ctx.ui.setTheme(blush);
+        const result = ctx.ui.setTheme(forest);
         if(!result.success) ctx.ui.notify(`pi-style theme unavailable: ${result.error || THEME}`, "warning");
       } else {
         ctx.ui.notify(`pi-style theme unavailable: ${THEME}`, "warning");
@@ -168,7 +169,7 @@ export default function(pi: ExtensionAPI) {
     }
 
     if(typeof ctx.ui.setFooter === "function" && !footerInstalled) {
-      const { truncateToWidth, visibleWidth } = await import("@earendil-works/pi-tui");
+      const { truncateToWidth } = await import("@earendil-works/pi-tui");
       ctx.ui.setFooter((tui, theme, data) => {
         const update = () => tui.requestRender();
         footerRerender = update;
@@ -180,20 +181,33 @@ export default function(pi: ExtensionAPI) {
           },
           invalidate() {},
           render(width: number): string[] {
-            const otherStatuses = [...data.getExtensionStatuses().entries()]
-              .filter(([key]) => key !== KEY).map(([, value]) => value);
-            const line = footerText(width, {
-              appearance, model: ctx.model?.id ?? active?.model ?? "unknown",
-              branch: data.getGitBranch(), usage: effectiveUsage(), elapsedMs: durationMs(),
-              running: !!active, exchanges: exchanges.length,
-              motionFrame: motion ? frame % 2 : 0, otherStatuses,
+            if(width < 1) return [];
+            const context = ctx.getContextUsage();
+            const lines = footerLines(width, {
+              appearance,
+              provider: ctx.model?.provider ?? "unknown-provider",
+              model: ctx.model?.id ?? active?.model ?? "unknown-model",
+              contextPercent: context?.percent,
+              contextTokens: context?.tokens,
+              contextWindow: context?.contextWindow,
+              usage: effectiveUsage(),
+              elapsedMs: durationMs(),
+              running: !!active,
             });
-            const colored = theme.fg("accent", line.slice(0, appearance === "cute" ? 1 : 0)) +
-              theme.fg("muted", line.slice(appearance === "cute" ? 1 : 0));
-            const statusWidth = visibleWidth(colored);
-            const safe = truncateToWidth(colored, Math.max(1,width), "");
-            // One line only, never overflow narrow SSH/tmux terminals
-            return [statusWidth > width ? safe : colored];
+            const ctxColor = context?.percent != null && Number.isFinite(context.percent)
+              ? context.percent >= 90 ? "error" : context.percent >= 70 ? "warning" : "success"
+              : "muted";
+            return lines.map((line, index) => {
+              const marker = " │ ";
+              const firstSeparator = line.indexOf(marker);
+              const colored = index === 0
+                ? firstSeparator < 0
+                  ? theme.fg(ctxColor, line)
+                  : theme.fg(ctxColor, line.slice(0, firstSeparator)) +
+                    theme.fg("borderMuted", marker) + theme.fg("text", line.slice(firstSeparator + marker.length))
+                : theme.fg("text", line);
+              return truncateToWidth(colored, width, "");
+            });
           },
         };
       });
@@ -240,7 +254,7 @@ export default function(pi: ExtensionAPI) {
 
   function startTimer(ctx: ExtensionContext) {
     stopTimer();
-    if(ctx.hasUI) timer = setInterval(() => { frame++; render(ctx); }, 1000);
+    if(ctx.hasUI) timer = setInterval(() => render(ctx), 1000);
   }
   function reset(ctx: ExtensionContext) {
     stopTimer();
@@ -429,7 +443,7 @@ export default function(pi: ExtensionAPI) {
   });
 
   pi.registerCommand("pi-style", {
-    description: "Appearance: cute | compact | off | theme | motion on/off | header on/off | editor on/off | quiet on/off",
+    description: "Appearance: cute | compact | off | theme | header on/off | editor on/off | quiet on/off",
     handler: async (args, ctx) => {
       const [first = "", second = ""] = args.trim().toLowerCase().split(/\s+/);
       if(first === "cute" || first === "compact" || first === "off") {
@@ -444,9 +458,6 @@ export default function(pi: ExtensionAPI) {
           const result = ctx.ui.setTheme(theme);
           ctx.ui.notify(result.success ? `Theme: ${THEME}` : `Theme unavailable: ${result.error}`, result.success ? "info" : "warning");
         } else ctx.ui.notify(`Theme not loaded: ${THEME}`, "warning");
-      } else if(first === "motion" && ["on","off"].includes(second)) {
-        motion = second === "on"; render(ctx);
-        ctx.ui.notify(`Motion: ${motion ? "enabled" : "reduced"}`, "info");
       } else if(["header","editor","quiet"].includes(first) && ["on","off"].includes(second)) {
         if(first === "header") showHeader = second === "on";
         if(first === "editor") showEditor = second === "on";
@@ -454,7 +465,7 @@ export default function(pi: ExtensionAPI) {
         await applySkin(ctx);
         ctx.ui.notify(`${first}: ${second}`, "info");
       } else {
-        ctx.ui.notify("Usage: /pi-style cute|compact|off|theme|motion on/off|header on/off|editor on/off|quiet on/off", "info");
+        ctx.ui.notify("Usage: /pi-style cute|compact|off|theme|header on/off|editor on/off|quiet on/off", "info");
       }
     },
   });
@@ -508,7 +519,7 @@ export default function(pi: ExtensionAPI) {
   });
 
   pi.registerCommand("pi-tui", {
-    description: "Interactive cute dashboard (TUI only)",
+    description: "Interactive usage dashboard (TUI only)",
     handler: async(_args, ctx) => {
       if(ctx.mode !== "tui" || typeof ctx.ui.custom !== "function") {
         ctx.ui.notify("Interactive dashboard requires Pi terminal mode", "warning");

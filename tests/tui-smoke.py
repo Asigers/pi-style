@@ -23,7 +23,7 @@ if pid == 0:
     os.environ["TERM"] = "xterm-256color"
     os.environ["CI"] = "1"
     # Redirect Pi user settings to isolated temp directory.
-    os.execv(BIN, [BIN, "-e", ".", "--use-theme", "pi-style-blush"])
+    os.execv(BIN, [BIN, "-e", ".", "--use-theme", "pi-style-forest"])
 
 fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", 32, 100, 0, 0))
 
@@ -51,8 +51,9 @@ def type_command(cmd):
 
 try:
     read_until("Border Collie", 25)
+    read_until("CTX --%", 10)
     type_command("/pi-tui")
-    read_until("usage atelier", 15)
+    read_until("USAGE / OVERVIEW", 15)
     os.write(fd, b"q")
     time.sleep(0.35)
     type_command("/pi-style off")
