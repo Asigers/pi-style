@@ -518,7 +518,7 @@ export default function(pi: ExtensionAPI) {
 
   // Preserve Pi's native call/result content and controls; only add a
   // compact tool status accent. Leave custom/self-rendered tools untouched.
-  pi.registerToolRenderer((name, next) => {
+  if(typeof pi.registerToolRenderer === "function") pi.registerToolRenderer((name, next) => {
     const base=next();
     if(appearance!=="cute" || !base || base.renderShell==="self" ||
       !["bash","read","edit","write","grep","find","ls"].includes(name)) return base;
