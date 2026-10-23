@@ -10,7 +10,11 @@ permissions:
 
 jobs:
   metrics:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -20,4 +24,5 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - name: Exercise Pi in a live Linux pseudo-terminal
+        if: runner.os == 'Linux'
         run: python3 tests/tui-smoke.py
