@@ -143,7 +143,7 @@ export function dashboardLines(width: number, state: DashboardState): string[] {
       }
       const ordered = [...groups.entries()].sort((a,b)=>b[1].elapsedMs-a[1].elapsedMs);
       for(const [project, data] of ordered.slice(state.page, state.page + 8)) {
-        rows.push(`${project} · ${data.count} turns · ${fmtDuration(data.elapsedMs)} · ~$\${data.cost.toFixed(3)}`);
+        rows.push(`${project} · ${data.count} turns · ${fmtDuration(data.elapsedMs)} · ~$${data.cost.toFixed(3)}`);
       }
       if(!ordered.length) rows.push("No indexed exchanges yet.");
     }
