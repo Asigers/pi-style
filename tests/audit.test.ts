@@ -217,7 +217,7 @@ test("reload does not warn while theme registry is unavailable, then restores Fo
   // Pi has not yet called setRegisteredThemes when extension session_start runs.
   await handlers.get("session_start")!({reason:"reload"},ctx);
   assert.equal(current,original);
-  assert.deepEqual(warnings,[],"must not warn before registration");
+  assert.equal(warnings.length,0,"must not warn before registration");
 
   // Simulate theme availability after one retry, plus a late applyFromSettings.
   await new Promise(resolve=>setTimeout(resolve,25));
