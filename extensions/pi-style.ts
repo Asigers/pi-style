@@ -1,6 +1,7 @@
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
+import { SessionStatsCache } from "../src/session-cache.ts";
 import {
-  ENTRY_TYPE, addUsage, branchExchanges, branchUsage, emptyUsage,
+  ENTRY_TYPE, addUsage, emptyUsage, subtractUsage,
   fmtDuration, fmtTokens, messageUsage,
   type ExchangeRecord, type Usage,
 } from "../src/metrics.ts";
@@ -23,6 +24,19 @@ interface ActiveExchange {
   modelMs: number;
   toolMs: number;
   label?: string;
+  /** The usage ledger at the beginning of this continuous run. */
+  baseline: Usage;
+  userMessages: number;
+  segmentStartedAtMs: number;
+  segmentStartedMonoMs: number;
+  segmentBaseline: Usage;
+  segmentLabel?: string;
+  segmentFirstOutputMs?: number;
+  segmentAssistantMessages: number;
+  segmentToolCalls: number;
+  segmentModelMs: number;
+  segmentToolMs: number;
+  completedSegments: ExchangeRecord[];
 }
 
 const KEY = "pi-style";
@@ -42,7 +56,8 @@ export default function(pi: ExtensionAPI) {
   let editorInstalled = false;
   let savedEditor: ReturnType<ExtensionContext["ui"]["getEditorComponent"]> | undefined;
   let editorCaptured = false;
-  let originalTheme: string | undefined;
+  let originalTheme: Theme | undefined;
+  const statsCache = new SessionStatsCache();
   let motion = false; // reduced motion by default
   let showHeader = true;
   let showEditor = true;
@@ -54,9 +69,9 @@ export default function(pi: ExtensionAPI) {
   const toolStarted = new Map<string, number>();
 
   function scan(ctx: ExtensionContext) {
-    const branch = ctx.sessionManager.getBranch();
-    totals = branchUsage(branch);
-    exchanges = branchExchanges(branch);
+    const snapshot = statsCache.get(ctx.sessionManager);
+    totals = snapshot.usage;
+    exchanges = snapshot.exchanges;
   }
   function stopTimer() {
     if(timer) clearInterval(timer);
@@ -122,6 +137,7 @@ export default function(pi: ExtensionAPI) {
       if(headerInstalled) { ctx.ui.setHeader(undefined); headerInstalled = false; }
       if(editorInstalled) { ctx.ui.setEditorComponent(editorCaptured ? savedEditor : undefined); editorInstalled = false; }
       if(ctx.ui.theme.name === THEME && originalTheme) ctx.ui.setTheme(originalTheme);
+      originalTheme = undefined;
       if(originalToolsExpanded !== undefined) {
         ctx.ui.setToolsExpanded(originalToolsExpanded);
         originalToolsExpanded = undefined;
@@ -130,10 +146,17 @@ export default function(pi: ExtensionAPI) {
       ctx.ui.setWidget(KEY, undefined);
       return;
     }
+    // Apply theme instances, not names: setTheme("name") persists into settings.json.
+    // The in-memory path keeps the user's configured theme intact across restarts.
     if(ctx.ui.theme.name !== THEME) {
-      if(!originalTheme) originalTheme = ctx.ui.theme.name || "system";
-      const result = ctx.ui.setTheme(THEME);
-      if(!result.success) ctx.ui.notify(`pi-style theme unavailable: ${result.error || THEME}`, "warning");
+      const blush = ctx.ui.getTheme(THEME);
+      if(blush) {
+        originalTheme ??= ctx.ui.theme;
+        const result = ctx.ui.setTheme(blush);
+        if(!result.success) ctx.ui.notify(`pi-style theme unavailable: ${result.error || THEME}`, "warning");
+      } else {
+        ctx.ui.notify(`pi-style theme unavailable: ${THEME}`, "warning");
+      }
     }
 
     if(typeof ctx.ui.setFooter === "function" && !footerInstalled) {
@@ -220,6 +243,8 @@ export default function(pi: ExtensionAPI) {
   }
 
   pi.on("session_start", async (_event, ctx) => {
+    statsCache.invalidate();
+    originalTheme = undefined;
     const { globalEnabled } = await import("../src/global-store.ts");
     globalTracking = await globalEnabled();
     // Component factories may be reset by a Pi session reload.
@@ -332,8 +357,12 @@ export default function(pi: ExtensionAPI) {
         render(ctx);
         ctx.ui.notify(`pi-style: ${first}`, "info");
       } else if(first === "theme") {
-        const result = ctx.ui.setTheme(THEME);
-        ctx.ui.notify(result.success ? `Theme: ${THEME}` : `Theme unavailable: ${result.error}`, result.success ? "info" : "warning");
+        const theme = ctx.ui.getTheme(THEME);
+        if(theme) {
+          originalTheme ??= ctx.ui.theme;
+          const result = ctx.ui.setTheme(theme);
+          ctx.ui.notify(result.success ? `Theme: ${THEME}` : `Theme unavailable: ${result.error}`, result.success ? "info" : "warning");
+        } else ctx.ui.notify(`Theme not loaded: ${THEME}`, "warning");
       } else if(first === "motion" && ["on","off"].includes(second)) {
         motion = second === "on"; render(ctx);
         ctx.ui.notify(`Motion: ${motion ? "enabled" : "reduced"}`, "info");
@@ -405,6 +434,7 @@ export default function(pi: ExtensionAPI) {
         return;
       }
       scan(ctx);
+      const currentSnapshot = statsCache.get(ctx.sessionManager);
       const globalRecords = globalTracking
         ? await (await import("../src/global-store.ts")).readIndexedExchanges()
         : undefined;
@@ -421,8 +451,8 @@ export default function(pi: ExtensionAPI) {
           invalidate() {},
           render(width: number): string[] {
             const state: DashboardState = {
-              tab, sort, filter, page, usage: branchUsage(ctx.sessionManager.getBranch()),
-              exchanges: branchExchanges(ctx.sessionManager.getBranch()),
+              tab, sort, filter, page, usage: currentSnapshot.usage,
+              exchanges: currentSnapshot.exchanges,
               globalRecords,
               contextPercent: ctx.getContextUsage()?.percent,
               model: ctx.model?.id ?? "unknown",
@@ -445,8 +475,8 @@ export default function(pi: ExtensionAPI) {
               filter = filters[(filters.indexOf(filter)+1)%filters.length]!; page = 0;
             } else if(data === "j" || matchesKey(data, "down")) {
               const len = tab === "history"
-                ? filteredHistory(branchExchanges(ctx.sessionManager.getBranch()), filter, sort).length
-                : tab === "daily" ? new Set((globalRecords ?? branchExchanges(ctx.sessionManager.getBranch())).map(e => e.startedAt.slice(0,10))).size
+                ? filteredHistory(currentSnapshot.exchanges, filter, sort).length
+                : tab === "daily" ? new Set((globalRecords ?? currentSnapshot.exchanges).map(e => e.startedAt.slice(0,10))).size
                 : tab === "projects" ? new Set((globalRecords ?? []).map(e => e.project)).size : 0;
               page = Math.min(Math.max(0, len-1), page+1);
             } else if(data === "k" || matchesKey(data, "up")) {
