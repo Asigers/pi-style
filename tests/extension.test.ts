@@ -63,7 +63,7 @@ test("records one settled exchange including usage and timing, and restores hist
   assert.equal(saved.data.toolCalls, 1);
   assert.ok(saved.data.elapsedMs >= 0);
   assert.ok(saved.data.firstOutputMs >= 0);
-  assert.ok(statuses.at(-1)?.includes("✓"));
+  assert.ok(statuses.at(-1)?.includes("test-model"));
   assert.equal(saved.data.timingBasis, "agent-start");
 
   await commands.get("pi-history")!.handler("", ctx);
