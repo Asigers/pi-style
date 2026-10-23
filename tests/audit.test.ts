@@ -119,9 +119,10 @@ test("real TUI UI API paths restore original theme without persisting settings",
   for(let i=0;i<100;i++) component.render(100);
   assert.equal(getBranchCalls,previousScans,"footer must not rescan session per frame");
   assert.ok(component.render(100).join("").includes("THINK high"));
+  const redrawsBeforeThinkingChange=redraws;
   activeThinking="xhigh";
   await events.get("thinking_level_select")!({level:"xhigh",previousLevel:"high"},ctx);
-  assert.ok(redraws>0,"thinking change must invalidate TUI footer");
+  assert.ok(redraws>redrawsBeforeThinkingChange,"thinking change must invalidate TUI footer");
   assert.ok(component.render(100).join("").includes("THINK xhigh"),"footer must reflect effective current level");
   await commands.get("pi-tui")!.handler("",ctx);
   assert.equal(modalRenderCount,1);
