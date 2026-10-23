@@ -26,17 +26,16 @@ test("matches upstream ledger for tool results, compactions, summaries and usage
     {input:3,output:6,cacheRead:9,cacheWrite:12,cost:0.30000000000000004});
 });
 
-test("cache uses leaf/count/session identity; no repeated history walk on redraw", () => {
+test("cache uses leaf and session identity; no repeated history walk on redraw", () => {
   const history=[{type:"message",message:{role:"assistant",usage:usage(7,0.7)}}];
-  let leaf="a",count=1,session="one",walks=0;
-  const mock={getSessionId:()=>session,getLeafId:()=>leaf,getEntryCount:()=>count,getBranch:()=>{walks++;return history;}};
+  let leaf="a",session="one",walks=0;
+  const mock={getSessionId:()=>session,getLeafId:()=>leaf,getBranch:()=>{walks++;return history;}};
   const cache=new SessionStatsCache();
   for(let i=0;i<500;i++) assert.equal(cache.get(mock).usage.input,7);
   assert.equal(walks,1);
-  count++; cache.get(mock);assert.equal(walks,2);
-  leaf="b";cache.get(mock);assert.equal(walks,3);
-  session="two";cache.get(mock);assert.equal(walks,4);
-  cache.invalidate();cache.get(mock);assert.equal(walks,5);
+  leaf="b";cache.get(mock);assert.equal(walks,2);
+  session="two";cache.get(mock);assert.equal(walks,3);
+  cache.invalidate();cache.get(mock);assert.equal(walks,4);
 });
 
 test("real TUI UI API paths restore original theme without persisting settings", async () => {
