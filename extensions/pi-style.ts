@@ -7,7 +7,7 @@ import {
   type ExchangeRecord, type Usage,
 } from "../src/metrics.ts";
 import {
-  dashboardLines, filteredHistory, footerLines, footerText, headerLines,
+  dashboardLines, dashboardLineColor, filteredHistory, footerLines, footerText, headerLines,
   type Appearance, type DashboardState, type DashboardTab,
   type HistoryFilter, type HistorySort,
 } from "../src/ui-layout.ts";
@@ -572,10 +572,13 @@ export default function(pi: ExtensionAPI) {
               exchanges: currentSnapshot.exchanges,
               globalRecords,
               contextPercent: ctx.getContextUsage()?.percent,
-              model: ctx.model?.id ?? "unknown",
+              contextTokens: ctx.getContextUsage()?.tokens,
+              contextWindow: ctx.getContextUsage()?.contextWindow,
+              provider: ctx.model?.provider ?? "unknown-provider",
+              model: ctx.model?.id ?? "unknown-model",
             };
             return dashboardLines(width, state).map((line, i) =>
-              truncateToWidth(theme.fg(i === 0 ? "accent" : (i === 1 ? "border" : "text"), line), Math.max(1,width), ""),
+              truncateToWidth(theme.fg(dashboardLineColor(line, i), line), Math.max(1,width), ""),
             );
           },
           handleInput(data: string) {
