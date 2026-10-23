@@ -97,7 +97,7 @@ export function footerLines(width: number, state: FooterState): string[] {
       if(space>=4) {
         const second=join([identityThinking,safe(title,space)]);
         for(const extra of [duration,cost]) {
-          if(extra && fits(join([first,extra]),width)) first=join([first,extra]);
+          if(width >= 50 && extra && fits(join([first,extra]),width)) first=join([first,extra]);
         }
         return [safe(first,width),second];
       }
@@ -106,7 +106,7 @@ export function footerLines(width: number, state: FooterState): string[] {
       if(fits(titleRow,width)) first=titleRow;
     } else {
       for(const extra of [duration,cost]) {
-        if(extra && fits(join([first,extra]),width)) first=join([first,extra]);
+        if(width >= 50 && extra && fits(join([first,extra]),width)) first=join([first,extra]);
       }
     }
     return [safe(first,width),identityThinking];
