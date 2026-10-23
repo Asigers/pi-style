@@ -1,6 +1,8 @@
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { randomUUID } from "node:crypto";
+import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
+import { SessionStatsCache } from "../src/session-cache.ts";
 import {
-  ENTRY_TYPE, addUsage, branchExchanges, branchUsage, emptyUsage,
+  ENTRY_TYPE, addUsage, emptyUsage, subtractUsage,
   fmtDuration, fmtTokens, messageUsage,
   type ExchangeRecord, type Usage,
 } from "../src/metrics.ts";
@@ -23,6 +25,19 @@ interface ActiveExchange {
   modelMs: number;
   toolMs: number;
   label?: string;
+  /** The usage ledger at the beginning of this continuous run. */
+  baseline: Usage;
+  userMessages: number;
+  segmentStartedAtMs: number;
+  segmentStartedMonoMs: number;
+  segmentBaseline: Usage;
+  segmentLabel?: string;
+  segmentFirstOutputMs?: number;
+  segmentAssistantMessages: number;
+  segmentToolCalls: number;
+  segmentModelMs: number;
+  segmentToolMs: number;
+  completedSegments: ExchangeRecord[];
 }
 
 const KEY = "pi-style";
@@ -42,7 +57,8 @@ export default function(pi: ExtensionAPI) {
   let editorInstalled = false;
   let savedEditor: ReturnType<ExtensionContext["ui"]["getEditorComponent"]> | undefined;
   let editorCaptured = false;
-  let originalTheme: string | undefined;
+  let originalTheme: Theme | undefined;
+  const statsCache = new SessionStatsCache();
   let motion = false; // reduced motion by default
   let showHeader = true;
   let showEditor = true;
@@ -51,16 +67,22 @@ export default function(pi: ExtensionAPI) {
   let frame = 0;
   let nextLabel: string | undefined;
   let globalTracking = false;
+  let themeReapplyTimer: ReturnType<typeof setTimeout> | undefined;
+  let sessionEpoch = 0;
   const toolStarted = new Map<string, number>();
 
   function scan(ctx: ExtensionContext) {
-    const branch = ctx.sessionManager.getBranch();
-    totals = branchUsage(branch);
-    exchanges = branchExchanges(branch);
+    const snapshot = statsCache.get(ctx.sessionManager);
+    totals = snapshot.usage;
+    exchanges = snapshot.exchanges;
   }
   function stopTimer() {
     if(timer) clearInterval(timer);
     timer = undefined;
+  }
+  function cancelThemeReapply() {
+    if(themeReapplyTimer) clearTimeout(themeReapplyTimer);
+    themeReapplyTimer = undefined;
   }
   function durationMs() {
     const latest = exchanges.at(-1);
@@ -118,10 +140,12 @@ export default function(pi: ExtensionAPI) {
   async function applySkin(ctx: ExtensionContext) {
     if(!ctx.hasUI || ctx.mode !== "tui") return;
     if(appearance === "off") {
+      cancelThemeReapply();
       if(footerInstalled) { ctx.ui.setFooter(undefined); footerInstalled = false; footerRerender = undefined; }
       if(headerInstalled) { ctx.ui.setHeader(undefined); headerInstalled = false; }
       if(editorInstalled) { ctx.ui.setEditorComponent(editorCaptured ? savedEditor : undefined); editorInstalled = false; }
       if(ctx.ui.theme.name === THEME && originalTheme) ctx.ui.setTheme(originalTheme);
+      originalTheme = undefined;
       if(originalToolsExpanded !== undefined) {
         ctx.ui.setToolsExpanded(originalToolsExpanded);
         originalToolsExpanded = undefined;
@@ -130,10 +154,17 @@ export default function(pi: ExtensionAPI) {
       ctx.ui.setWidget(KEY, undefined);
       return;
     }
+    // Apply theme instances, not names: setTheme("name") persists into settings.json.
+    // The in-memory path keeps the user's configured theme intact across restarts.
     if(ctx.ui.theme.name !== THEME) {
-      if(!originalTheme) originalTheme = ctx.ui.theme.name || "system";
-      const result = ctx.ui.setTheme(THEME);
-      if(!result.success) ctx.ui.notify(`pi-style theme unavailable: ${result.error || THEME}`, "warning");
+      const blush = ctx.ui.getTheme(THEME);
+      if(blush) {
+        originalTheme ??= ctx.ui.theme;
+        const result = ctx.ui.setTheme(blush);
+        if(!result.success) ctx.ui.notify(`pi-style theme unavailable: ${result.error || THEME}`, "warning");
+      } else {
+        ctx.ui.notify(`pi-style theme unavailable: ${THEME}`, "warning");
+      }
     }
 
     if(typeof ctx.ui.setFooter === "function" && !footerInstalled) {
@@ -220,6 +251,8 @@ export default function(pi: ExtensionAPI) {
   }
 
   pi.on("session_start", async (_event, ctx) => {
+    statsCache.invalidate();
+    originalTheme = undefined;
     const { globalEnabled } = await import("../src/global-store.ts");
     globalTracking = await globalEnabled();
     // Component factories may be reset by a Pi session reload.
@@ -227,9 +260,23 @@ export default function(pi: ExtensionAPI) {
     editorCaptured = false; savedEditor = undefined; footerRerender = undefined;
     reset(ctx);
     await applySkin(ctx);
+    // Pi re-applies settings AFTER extension binding during session switching.
+    // Reassert the in-memory style after that synchronous rebind step.
+    // Guard against stale callbacks after rapid /new or /resume.
+    cancelThemeReapply();
+    const epoch = ++sessionEpoch;
+    if(ctx.mode === "tui" && appearance !== "off") {
+      themeReapplyTimer = setTimeout(() => {
+        themeReapplyTimer = undefined;
+        if(epoch !== sessionEpoch || appearance === "off") return;
+        void applySkin(ctx);
+      }, 0);
+    }
   });
   pi.on("session_tree", (_event, ctx) => { scan(ctx); render(ctx); });
   pi.on("session_shutdown", async (_event, ctx) => {
+    sessionEpoch++;
+    cancelThemeReapply();
     stopTimer(); toolStarted.clear(); active = undefined;
     // Do not change the user's theme/other extensions on shutdown.
     if(ctx.hasUI) {
@@ -239,28 +286,81 @@ export default function(pi: ExtensionAPI) {
   });
   pi.on("model_select", (_event, ctx) => render(ctx));
 
+  function finishSegment(run: ActiveExchange, ctx: ExtensionContext, endedAtMs: number, endedMonoMs: number, aborted: boolean) {
+    statsCache.invalidate();
+    const currentUsage = statsCache.get(ctx.sessionManager).usage;
+    const isShared = run.userMessages > 1;
+    const record: ExchangeRecord = {
+      version: 1,
+      startedAt: new Date(run.segmentStartedAtMs).toISOString(),
+      endedAt: new Date(endedAtMs).toISOString(),
+      elapsedMs: Math.round(Math.max(0, endedMonoMs - run.segmentStartedMonoMs)),
+      model: run.model,
+      usage: subtractUsage(currentUsage, run.segmentBaseline),
+      assistantMessages: run.assistantMessages - run.segmentAssistantMessages,
+      toolCalls: run.toolCalls - run.segmentToolCalls,
+      aborted,
+      ...(run.segmentLabel ? { label: run.segmentLabel } : {}),
+      ...(run.segmentFirstOutputMs === undefined ? {} : { firstOutputMs: Math.round(run.segmentFirstOutputMs) }),
+      modelMs: Math.round(run.modelMs - run.segmentModelMs),
+      toolMs: Math.round(run.toolMs - run.segmentToolMs),
+      // For queued inputs we measure processing from message_start, not queue wait.
+      timingBasis: isShared ? "processing" : "agent-start",
+      sharedRun: isShared,
+    };
+    run.completedSegments.push(record);
+    run.segmentBaseline = currentUsage;
+  }
+
   pi.on("before_agent_start", (event, ctx) => {
     if(event.messageType !== "user" || active) return;
+    scan(ctx);
+    const now=Date.now(), mono=performance.now(), baseline={...totals};
     active = {
-      startedAtMs: Date.now(), startedMonoMs: performance.now(),
+      startedAtMs: now, startedMonoMs: mono,
       model: ctx.model?.id ?? "unknown", usage: emptyUsage(),
       assistantMessages: 0, toolCalls: 0, modelMs: 0, toolMs: 0,
-      label: nextLabel,
+      baseline, userMessages: 0, segmentStartedAtMs: now, segmentStartedMonoMs: mono,
+      segmentBaseline: baseline, segmentAssistantMessages: 0, segmentToolCalls: 0,
+      segmentModelMs: 0, segmentToolMs: 0, segmentLabel: nextLabel, completedSegments: [],
     };
     nextLabel = undefined;
     startTimer(ctx);
     render(ctx);
   });
-  pi.on("message_start", (event, _ctx) => {
-    if(active && event.message.role === "assistant" && active.modelStart === undefined) {
+
+  pi.on("message_start", (event, ctx) => {
+    if(!active) return;
+    if(event.message.role === "user") {
+      active.userMessages += 1;
+      if(active.userMessages > 1) {
+        const now=Date.now(), mono=performance.now();
+        finishSegment(active, ctx, now, mono, false);
+        active.segmentStartedAtMs=now;
+        active.segmentStartedMonoMs=mono;
+        active.segmentFirstOutputMs=undefined;
+        active.segmentAssistantMessages=active.assistantMessages;
+        active.segmentToolCalls=active.toolCalls;
+        active.segmentModelMs=active.modelMs;
+        active.segmentToolMs=active.toolMs;
+        active.segmentLabel=undefined;
+      }
+    } else if(event.message.role === "assistant" && active.modelStart === undefined) {
       active.modelStart = performance.now();
     }
   });
+
   pi.on("message_update", (event, _ctx) => {
-    if(!active || active.firstOutputMs !== undefined) return;
+    if(!active) return;
     const kind = event.assistantMessageEvent.type;
     if(kind === "text_delta" || kind === "thinking_delta" || kind === "toolcall_start") {
-      active.firstOutputMs = Math.max(0, performance.now() - active.startedMonoMs);
+      const now=performance.now();
+      if(active.firstOutputMs === undefined) {
+        active.firstOutputMs = Math.max(0, now - active.startedMonoMs);
+      }
+      if(active.segmentFirstOutputMs === undefined) {
+        active.segmentFirstOutputMs = Math.max(0, now - active.segmentStartedMonoMs);
+      }
     }
   });
   pi.on("message_end", (event, ctx) => {
@@ -283,7 +383,6 @@ export default function(pi: ExtensionAPI) {
     if(!active) return;
     const started = toolStarted.get(event.toolCallId);
     if(started !== undefined) {
-      // Sum tool invocation durations; concurrent tools can overlap.
       active.toolMs += typeof event.durationMs === "number"
         ? Math.max(0, event.durationMs)
         : Math.max(0, performance.now() - started);
@@ -291,33 +390,40 @@ export default function(pi: ExtensionAPI) {
     }
     render(ctx);
   });
+
   pi.on("agent_settled", async (event, ctx) => {
     if(!active) return;
     stopTimer();
-    const current = active;
-    active = undefined;
+    const run=active;
+    active=undefined;
     toolStarted.clear();
-    const elapsedMs = Math.max(0, performance.now() - current.startedMonoMs);
-    const record: ExchangeRecord = {
-      version: 1, startedAt: new Date(current.startedAtMs).toISOString(),
-      endedAt: new Date().toISOString(), elapsedMs: Math.round(elapsedMs),
-      model: current.model, usage: current.usage,
-      assistantMessages: current.assistantMessages, toolCalls: current.toolCalls,
-      aborted: event.aborted === true,
-      ...(current.label ? { label: current.label } : {}),
-      ...(current.firstOutputMs === undefined ? {} : { firstOutputMs: Math.round(current.firstOutputMs) }),
-      modelMs: Math.round(current.modelMs), toolMs: Math.round(current.toolMs),
-    };
-    pi.appendEntry(ENTRY_TYPE, record);
-    if(globalTracking) {
-      try {
-        const { appendIndexedExchange } = await import("../src/global-store.ts");
-        const sessionId = ctx.sessionManager.getSessionId();
-        await appendIndexedExchange({...record, id: sessionId + ":" + record.startedAt, sessionId, project: ctx.cwd});
-      } catch(error) {
-        ctx.ui.notify(`pi-style index write failed: ${String(error)}`, "warning");
+    const endedAtMs=Date.now(), endedMonoMs=performance.now();
+    // If a retried/custom sequence did not re-emit the user message, keep the
+    // initial user request rather than inventing an extra prompt.
+    finishSegment(run, ctx, endedAtMs, endedMonoMs, event.aborted === true);
+    const shared=run.userMessages > 1;
+    for(const record of run.completedSegments) {
+      if(shared) {
+        record.sharedRun=true;
+        record.timingBasis="processing";
+      }
+      pi.appendEntry(ENTRY_TYPE, record);
+      if(globalTracking) {
+        try {
+          const { appendIndexedExchange } = await import("../src/global-store.ts");
+          const sessionId=ctx.sessionManager.getSessionId();
+          await appendIndexedExchange({
+            ...record,
+            id: sessionId + ":" + randomUUID(),
+            sessionId,
+            project: ctx.cwd,
+          });
+        } catch(error) {
+          ctx.ui.notify(`pi-style index write failed: ${String(error)}`, "warning");
+        }
       }
     }
+    statsCache.invalidate();
     scan(ctx);
     render(ctx);
   });
@@ -332,8 +438,12 @@ export default function(pi: ExtensionAPI) {
         render(ctx);
         ctx.ui.notify(`pi-style: ${first}`, "info");
       } else if(first === "theme") {
-        const result = ctx.ui.setTheme(THEME);
-        ctx.ui.notify(result.success ? `Theme: ${THEME}` : `Theme unavailable: ${result.error}`, result.success ? "info" : "warning");
+        const theme = ctx.ui.getTheme(THEME);
+        if(theme) {
+          originalTheme ??= ctx.ui.theme;
+          const result = ctx.ui.setTheme(theme);
+          ctx.ui.notify(result.success ? `Theme: ${THEME}` : `Theme unavailable: ${result.error}`, result.success ? "info" : "warning");
+        } else ctx.ui.notify(`Theme not loaded: ${THEME}`, "warning");
       } else if(first === "motion" && ["on","off"].includes(second)) {
         motion = second === "on"; render(ctx);
         ctx.ui.notify(`Motion: ${motion ? "enabled" : "reduced"}`, "info");
@@ -405,6 +515,7 @@ export default function(pi: ExtensionAPI) {
         return;
       }
       scan(ctx);
+      const currentSnapshot = statsCache.get(ctx.sessionManager);
       const globalRecords = globalTracking
         ? await (await import("../src/global-store.ts")).readIndexedExchanges()
         : undefined;
@@ -421,8 +532,8 @@ export default function(pi: ExtensionAPI) {
           invalidate() {},
           render(width: number): string[] {
             const state: DashboardState = {
-              tab, sort, filter, page, usage: branchUsage(ctx.sessionManager.getBranch()),
-              exchanges: branchExchanges(ctx.sessionManager.getBranch()),
+              tab, sort, filter, page, usage: currentSnapshot.usage,
+              exchanges: currentSnapshot.exchanges,
               globalRecords,
               contextPercent: ctx.getContextUsage()?.percent,
               model: ctx.model?.id ?? "unknown",
@@ -445,8 +556,8 @@ export default function(pi: ExtensionAPI) {
               filter = filters[(filters.indexOf(filter)+1)%filters.length]!; page = 0;
             } else if(data === "j" || matchesKey(data, "down")) {
               const len = tab === "history"
-                ? filteredHistory(branchExchanges(ctx.sessionManager.getBranch()), filter, sort).length
-                : tab === "daily" ? new Set((globalRecords ?? branchExchanges(ctx.sessionManager.getBranch())).map(e => e.startedAt.slice(0,10))).size
+                ? filteredHistory(currentSnapshot.exchanges, filter, sort).length
+                : tab === "daily" ? new Set((globalRecords ?? currentSnapshot.exchanges).map(e => e.startedAt.slice(0,10))).size
                 : tab === "projects" ? new Set((globalRecords ?? []).map(e => e.project)).size : 0;
               page = Math.min(Math.max(0, len-1), page+1);
             } else if(data === "k" || matchesKey(data, "up")) {

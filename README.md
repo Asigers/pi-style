@@ -2,7 +2,7 @@
 
 A single-palette **cute terminal skin + usage atelier** for [Pi Coding Agent](https://pi.dev).
 
-> v0.2.0 · Blush (dark), local-first · no fork · no model prompt injection.
+> v0.2.1 · Blush (dark), local-first · no fork · no model prompt injection.
 
 ## Screenshot-style preview
 
@@ -65,15 +65,15 @@ pi -e ./extensions/pi-style.ts --theme ./themes/pi-style-blush.json
 
 ## What it measures
 
-Token counts derive from assistant message usage, preserving separate **input / output / cache read / cache write**. Estimated cost comes from Pi's usage metadata, **not the actual New API/provider bill**.
+Token counts derive from Pi session ledger entries (assistant, tool results, standalone usage, compaction, branch summaries), preserving separate **input / output / cache read / cache write**. Estimated cost comes from Pi's usage metadata, **not the actual New API/provider bill**.
 
 Conversation wall time is measured from `before_agent_start` to `agent_settled`. It includes tools, retries and automatic continuations. Optional telemetry fields `modelMs` and `toolMs` are **not** mutually-exclusive wall-time buckets: model duration observes assistant message span, and concurrent tool durations are summed.
 
-- Each settled exchange is persisted as a `pi-style.exchange` entry inside Pi's session JSONL.
+- Each processed user message is recorded as a `pi-style.exchange` entry when the run settles. Queued inputs are segmented at user `message_start` boundaries. Shared runs explicitly record `sharedRun: true` and `timingBasis: "processing"`; queue waiting is not measured.
 - Current branch totals follow Pi session-tree navigation, not abandoned sibling branches.
 - A pre-installation conversation has historical token usage but **no retroactive timing records**.
 - Forced termination before settlement produces no completed record.
-- Queued user prompts handled in one continuous agent run can share a single duration record.
+- Queued user prompts in one continuous run produce individual processing segments. When batched, timing/usage attribution is approximate and explicitly marked.
 - Optional `/pi-label` records **only** explicitly entered text (max 64 characters).
 - Prompt texts, tool arguments and responses are not copied into the metrics index.
 
@@ -89,7 +89,7 @@ Records contain timestamps, session ID, **absolute project directory path**, mod
 
 ## Compatibility and limitations
 
-Designed against the latest `@earendil-works/pi-coding-agent` API. Component factories run **only in TUI mode**; RPC/Pi-Web needs its own browser rendering. Header replacement hides Pi's default startup hints; `/pi-style compact` restores them. The custom footer can conflict with other extensions that also replace the footer, and manual theme changes during a session are not continuously monitored.
+Designed against the latest `@earendil-works/pi-coding-agent` API. Component factories run **only in TUI mode**; RPC/Pi-Web needs its own browser rendering. Header replacement hides Pi's default startup hints; `/pi-style compact` restores them. Theme switching uses in-memory instances and does not overwrite the user's persisted theme setting; `/pi-style off` restores the prior theme. The custom footer can conflict with other extensions that also replace the footer, and manual theme changes during a session are not continuously monitored.
 
 CuteEditor subclasses the built-in `CustomEditor`, calling the stock editing logic and only decorating the bottom border; normal shortcuts and IME processing are intentionally unchanged.
 
@@ -101,7 +101,7 @@ One theme is packaged. There is no browser/CSS layout, no actual provider billin
 npm test
 ```
 
-Tests cover usage aggregation, session lifecycle, responsive layout, history sorting/filtering, theme completeness, and optional global index aggregation. Manual end-to-end testing on Windows Terminal, tmux/SSH and Pi-Web is still recommended.
+Tests cover full usage ledger, multi-message timing, in-memory theme restoration, TUI API interactions, session scan caching, session lifecycle, responsive layout, and optional global indexing. Manual end-to-end testing on Windows Terminal, tmux/SSH and Pi-Web is still recommended.
 
 See [ROADMAP.md](docs/ROADMAP.md) for feature status and remaining tasks.
 

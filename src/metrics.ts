@@ -27,6 +27,10 @@ export interface ExchangeRecord {
   modelMs?: number;
   /** Sum of tool execution durations; may exceed wall time for concurrent tools. */
   toolMs?: number;
+  /** Time begins when Pi processes a queued user message, not when it was typed. */
+  timingBasis?: "agent-start" | "processing";
+  /** Shared-run attribution may be imprecise when Pi batches queued messages. */
+  sharedRun?: boolean;
 }
 
 export function emptyUsage(): Usage {
@@ -62,13 +66,46 @@ export function addUsage(a: Usage, b: Usage): Usage {
   };
 }
 
+/** Usage extraction consistent with Pi's session statistics accounting.
+ * One ledger entry contributes at most once; custom pi-style records have no cost. */
+export function entryUsage(entry: unknown): Usage {
+  if (!entry || typeof entry !== "object") return emptyUsage();
+  const e = entry as { type?: string; usage?: unknown; message?: unknown };
+  if (e.type === "message") {
+    if (!e.message || typeof e.message !== "object") return emptyUsage();
+    const message = e.message as {role?: unknown;usage?: unknown};
+    if (message.role !== "assistant" && message.role !== "toolResult") return emptyUsage();
+    return rawUsage(message.usage);
+  }
+  if (e.type === "usage" || e.type === "branch_summary" || e.type === "compaction") {
+    return rawUsage(e.usage);
+  }
+  return emptyUsage();
+}
+
+export function rawUsage(value: unknown): Usage {
+  if(!value || typeof value !== "object") return emptyUsage();
+  const u=value as Record<string,unknown>;
+  const costs=u.cost && typeof u.cost === "object" ? u.cost as Record<string, unknown> : undefined;
+  return {
+    input:numeric(u.input), output:numeric(u.output), cacheRead:numeric(u.cacheRead),
+    cacheWrite:numeric(u.cacheWrite), cost:numeric(costs?.total),
+  };
+}
+
+export function subtractUsage(after: Usage, before: Usage): Usage {
+  return {
+    input: Math.max(0, after.input - before.input),
+    output: Math.max(0, after.output - before.output),
+    cacheRead: Math.max(0, after.cacheRead - before.cacheRead),
+    cacheWrite: Math.max(0, after.cacheWrite - before.cacheWrite),
+    cost: Math.max(0, after.cost - before.cost),
+  };
+}
+
 export function branchUsage(entries: readonly unknown[]): Usage {
   let usage = emptyUsage();
-  for (const entry of entries) {
-    if (!entry || typeof entry !== "object") continue;
-    const e = entry as { type?: unknown; message?: unknown };
-    if (e.type === "message") usage = addUsage(usage, messageUsage(e.message));
-  }
+  for (const entry of entries) usage = addUsage(usage, entryUsage(entry));
   return usage;
 }
 

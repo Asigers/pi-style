@@ -1,6 +1,6 @@
 {
   "name": "@asigers/pi-style",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "Single-palette cute TUI and usage analytics for Pi Coding Agent",
   "type": "module",
@@ -16,7 +16,7 @@
     "node": ">=22.19.0"
   },
   "scripts": {
-    "test": "node --experimental-strip-types --test tests/metrics.test.ts tests/extension.test.ts tests/ui-layout.test.ts tests/theme.test.ts tests/global-store.test.ts",
+    "test": "node --experimental-strip-types --test tests/metrics.test.ts tests/extension.test.ts tests/ui-layout.test.ts tests/theme.test.ts tests/global-store.test.ts tests/audit.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
