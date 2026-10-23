@@ -7,7 +7,7 @@ import {
   type ExchangeRecord, type Usage,
 } from "../src/metrics.ts";
 import {
-  dashboardLines, filteredHistory, footerLines, footerText, headerLines,
+  dashboardLines, dashboardLineColor, filteredHistory, footerLines, footerText, headerLines,
   type Appearance, type DashboardState, type DashboardTab,
   type HistoryFilter, type HistorySort,
 } from "../src/ui-layout.ts";
@@ -58,6 +58,7 @@ export default function(pi: ExtensionAPI) {
   let savedEditor: ReturnType<ExtensionContext["ui"]["getEditorComponent"]> | undefined;
   let editorCaptured = false;
   let originalTheme: Theme | undefined;
+  let missingThemeWarningShown = false;
   const statsCache = new SessionStatsCache();
   let showHeader = true;
   let showEditor = true;
@@ -138,7 +139,47 @@ export default function(pi: ExtensionAPI) {
     }
   }
 
-  async function applySkin(ctx: ExtensionContext) {
+  /** Theme instances change the active TUI without rewriting user settings. */
+  function applyTheme(ctx: ExtensionContext, warnMissing = true): boolean {
+    if(ctx.ui.theme.name === THEME) return true;
+    const forest = ctx.ui.getTheme(THEME);
+    if(!forest) {
+      if(warnMissing && !missingThemeWarningShown) {
+        missingThemeWarningShown = true;
+        ctx.ui.notify(`pi-style theme unavailable: ${THEME}. Check /settings or reinstall the package.`, "warning");
+      }
+      return false;
+    }
+    originalTheme ??= ctx.ui.theme;
+    const result = ctx.ui.setTheme(forest);
+    if(!result.success) {
+      if(warnMissing && !missingThemeWarningShown) {
+        missingThemeWarningShown = true;
+        ctx.ui.notify(`pi-style theme failed: ${result.error || THEME}`, "warning");
+      }
+      return false;
+    }
+    missingThemeWarningShown = false;
+    return true;
+  }
+
+  /** On /reload Pi registers package themes and reapplies settings AFTER session_start. */
+  function reapplyThemeAfterBinding(ctx: ExtensionContext, epoch: number, attempt = 0) {
+    if(epoch !== sessionEpoch || appearance === "off" || ctx.mode !== "tui") return;
+    if(applyTheme(ctx, false)) return;
+    const retryMs = [70, 200, 500, 1000];
+    if(attempt < retryMs.length) {
+      themeReapplyTimer = setTimeout(() => {
+        themeReapplyTimer = undefined;
+        reapplyThemeAfterBinding(ctx, epoch, attempt + 1);
+      }, retryMs[attempt]!);
+    } else {
+      // Do not flood the conversation with warnings during temporary /reload gaps.
+      applyTheme(ctx, true);
+    }
+  }
+
+  async function applySkin(ctx: ExtensionContext, deferMissingTheme = false) {
     if(!ctx.hasUI || ctx.mode !== "tui") return;
     if(appearance === "off") {
       cancelThemeReapply();
@@ -155,18 +196,9 @@ export default function(pi: ExtensionAPI) {
       ctx.ui.setWidget(KEY, undefined);
       return;
     }
-    // Apply theme instances, not names: setTheme("name") persists into settings.json.
-    // The in-memory path keeps the user's configured theme intact across restarts.
-    if(ctx.ui.theme.name !== THEME) {
-      const forest = ctx.ui.getTheme(THEME);
-      if(forest) {
-        originalTheme ??= ctx.ui.theme;
-        const result = ctx.ui.setTheme(forest);
-        if(!result.success) ctx.ui.notify(`pi-style theme unavailable: ${result.error || THEME}`, "warning");
-      } else {
-        ctx.ui.notify(`pi-style theme unavailable: ${THEME}`, "warning");
-      }
-    }
+    // Startup and /reload may run before Pi registers newly installed themes.
+    // Defer the missing-theme warning until Pi has finished its own reload.
+    applyTheme(ctx, !deferMissingTheme);
 
     if(typeof ctx.ui.setFooter === "function" && !footerInstalled) {
       const { truncateToWidth } = await import("@earendil-works/pi-tui");
@@ -273,17 +305,15 @@ export default function(pi: ExtensionAPI) {
     footerInstalled = false; headerInstalled = false; editorInstalled = false;
     editorCaptured = false; savedEditor = undefined; footerRerender = undefined;
     reset(ctx);
-    await applySkin(ctx);
-    // Pi re-applies settings AFTER extension binding during session switching.
-    // Reassert the in-memory style after that synchronous rebind step.
-    // Guard against stale callbacks after rapid /new or /resume.
     cancelThemeReapply();
     const epoch = ++sessionEpoch;
+    await applySkin(ctx, true);
+    // Pi's /reload handler registers themes then applies persisted theme settings
+    // only after this event resolves. Retry the nonpersistent theme afterwards.
     if(ctx.mode === "tui" && appearance !== "off") {
       themeReapplyTimer = setTimeout(() => {
         themeReapplyTimer = undefined;
-        if(epoch !== sessionEpoch || appearance === "off") return;
-        void applySkin(ctx);
+        reapplyThemeAfterBinding(ctx, epoch);
       }, 0);
     }
   });
@@ -452,12 +482,7 @@ export default function(pi: ExtensionAPI) {
         render(ctx);
         ctx.ui.notify(`pi-style: ${first}`, "info");
       } else if(first === "theme") {
-        const theme = ctx.ui.getTheme(THEME);
-        if(theme) {
-          originalTheme ??= ctx.ui.theme;
-          const result = ctx.ui.setTheme(theme);
-          ctx.ui.notify(result.success ? `Theme: ${THEME}` : `Theme unavailable: ${result.error}`, result.success ? "info" : "warning");
-        } else ctx.ui.notify(`Theme not loaded: ${THEME}`, "warning");
+        if(applyTheme(ctx, true)) ctx.ui.notify(`Theme: ${THEME}`, "info");
       } else if(["header","editor","quiet"].includes(first) && ["on","off"].includes(second)) {
         if(first === "header") showHeader = second === "on";
         if(first === "editor") showEditor = second === "on";
@@ -547,10 +572,13 @@ export default function(pi: ExtensionAPI) {
               exchanges: currentSnapshot.exchanges,
               globalRecords,
               contextPercent: ctx.getContextUsage()?.percent,
-              model: ctx.model?.id ?? "unknown",
+              contextTokens: ctx.getContextUsage()?.tokens,
+              contextWindow: ctx.getContextUsage()?.contextWindow,
+              provider: ctx.model?.provider ?? "unknown-provider",
+              model: ctx.model?.id ?? "unknown-model",
             };
             return dashboardLines(width, state).map((line, i) =>
-              truncateToWidth(theme.fg(i === 0 ? "accent" : (i === 1 ? "border" : "text"), line), Math.max(1,width), ""),
+              truncateToWidth(theme.fg(dashboardLineColor(line, i), line), Math.max(1,width), ""),
             );
           },
           handleInput(data: string) {

@@ -2,7 +2,7 @@
 
 A **context-first terminal status bar, Forest Night theme, and local usage dashboard** for [Pi Coding Agent](https://pi.dev).
 
-> v0.3.0 · Forest Night (dark), one color palette · no prompt injection · local-first.
+> v0.3.1 · Forest Night (dark), one color palette · no prompt injection · local-first.
 
 ## Terminal preview
 
@@ -15,10 +15,10 @@ A **context-first terminal status bar, Forest Night theme, and local usage dashb
      \   \____/    /
       \____________/
 
-CTX 42% 84k/200k │ newapi/gpt-6 │ ↑128k ↓18.6k │ 01:24 │ ~$0.145
+CTX 42.0% 84k/200k │ newapi/gpt-6 │ ↑128k ↓18.6k │ 01:24 │ ~$0.145
 
 # Narrow terminals use at most two footer lines:
-CTX 42% 84k/200k
+CTX 42.0% 84k/200k
 newapi/gpt-6
 ```
 
@@ -36,7 +36,7 @@ pi install git:github.com/Asigers/pi-style
 pi update git:github.com/Asigers/pi-style
 ```
 
-After installation, restart Pi or run `/reload`. Theme switching in the extension is in-memory and does not overwrite your configured theme.
+After installation, restart Pi or run `/reload`. The extension defers theme application until Pi has registered themes on reload, avoiding temporary missing-theme warnings. Theme switching remains in-memory and does not overwrite your configured theme.
 
 For local development:
 
@@ -55,7 +55,7 @@ pi -e ./extensions/pi-style.ts --theme ./themes/pi-style-forest.json
 | `/pi-style header on/off` | Show/hide Border Collie startup header |
 | `/pi-style editor on/off` | Show/hide the minimal editor border marker |
 | `/pi-style quiet on/off` | Collapse/restore built-in tool outputs (no tool content changes) |
-| `/pi-tui` | Interactive dashboard with four tabs |
+| `/pi-tui` | Responsive dashboard: context, provider/model, tokens, estimated cost and tracked timing |
 | `/pi-usage` | Quick Token/Cache/Cost widget |
 | `/pi-history` | Last five completed exchanges |
 | `/pi-label <text>` | Optional label for *next* conversation; prompt is never stored |
@@ -78,7 +78,7 @@ Conversation wall time is measured from `before_agent_start` to `agent_settled`.
 
 - Each processed user message is recorded as a `pi-style.exchange` entry when the run settles. Queued inputs are segmented at user `message_start` boundaries. Shared runs explicitly record `sharedRun: true` and `timingBasis: "processing"`; queue waiting is not measured.
 - Current branch totals follow Pi session-tree navigation, not abandoned sibling branches.
-- A pre-installation conversation has historical token usage but **no retroactive timing records**.
+- A pre-installation conversation has historical token usage but **no retroactive timing records**. The overview shows an explicit empty state rather than misleading 0s totals.
 - Forced termination before settlement produces no completed record.
 - Queued user prompts in one continuous run produce individual processing segments. When batched, timing/usage attribution is approximate and explicitly marked.
 - Optional `/pi-label` records **only** explicitly entered text (max 64 characters).

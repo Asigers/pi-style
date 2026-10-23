@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import { strict as assert } from "node:assert";
 import {
-  footerText, footerLines, headerLines, dashboardLines, filteredHistory, dailyTotals,
+  footerText, footerLines, headerLines, dashboardLines, dashboardLineColor, filteredHistory, dailyTotals,
   type FooterState, type DashboardState,
 } from "../src/ui-layout.ts";
 import { emptyUsage, type ExchangeRecord } from "../src/metrics.ts";
@@ -26,7 +26,7 @@ test("width-aware context-first footer keeps provider and model, removing low-pr
     assert.ok(!/[♡♥]/.test(lines.join("")));
   }
   assert.equal(footerLines(120,base).length,1);
-  assert.ok(footerLines(120,base)[0]?.includes("84k/200k"));
+  assert.ok(footerLines(120,base)[0]?.includes("42.0% 84k/200k"));
   assert.ok(footerLines(120,base)[0]?.includes("↑128k ↓18.6k"));
   assert.ok(footerLines(120,base)[0]?.includes("01:24"));
   assert.ok(footerLines(120,base)[0]?.includes("~$0.145"));
@@ -39,7 +39,7 @@ test("width-aware context-first footer keeps provider and model, removing low-pr
 test("unknown or post-compaction context never claims 0%", () => {
   const lines=footerLines(120,{...base,contextPercent:null,contextTokens:null});
   assert.ok(lines[0]?.includes("CTX --%"));
-  assert.ok(!lines.join("").includes("CTX 0%"));
+  assert.ok(!lines.join("").includes("CTX 0.0%"));
   assert.ok(lines.join(" ").includes("newapi/gpt-6-long-context"));
 });
 
@@ -86,8 +86,43 @@ test("interactive dashboard can sort, filter and group UTC daily records", () =>
   assert.equal(daily[0]![0],"2026-10-22");
   assert.equal(daily[0]![1].count,2);
   assert.equal(daily[0]![1].elapsedMs,5000);
-  const state:DashboardState={tab:"overview",sort:"recent",filter:"all",page:0,usage:emptyUsage(),exchanges:[a,b,c],model:"test",contextPercent:12};
-  assert.ok(dashboardLines(80,state).some(x=>x.includes("Exchanges  3")));
+  const state:DashboardState={tab:"overview",sort:"recent",filter:"all",page:0,usage:emptyUsage(),exchanges:[a,b,c],provider:"canway",model:"test",contextPercent:12.37,contextTokens:63000,contextWindow:512000};
+  assert.ok(dashboardLines(80,state).some(x=>x.includes("Exchanges 3")));
   assert.ok(dashboardLines(80,{...state,tab:"history",sort:"slowest",filter:"success"}).some(x=>x.includes("10-21")));
   assert.ok(dashboardLines(80,{...state,tab:"daily"}).some(x=>x.includes("2026-10-22")));
+});
+
+test("overview groups key data and renders accurate context and provider at terminal widths", () => {
+  const st: DashboardState = {
+    tab:"overview", sort:"recent", filter:"all", page:0,
+    usage:{input:2586758,output:48601,cacheRead:1567488,cacheWrite:0,cost:2.5905},
+    exchanges:[], contextPercent:23.7,contextTokens:121500,contextWindow:512000,
+    provider:"canway", model:"gpt-6.1-sol",
+  };
+  for(const width of [120, 90, 78, 70, 55, 40, 24]){
+    const lines=dashboardLines(width,st);
+    assert.ok(lines.some(x=>x.includes("23.7%")),`context missing at ${width}`);
+    assert.ok(lines.some(x=>x.includes("canway")),`provider missing at ${width}`);
+    assert.ok(lines.some(x=>x.includes("2,586,758")) || width<29,
+      `input missing at ${width}`);
+    assert.ok(lines.some(x=>x.includes("No timing records")) || width < 19);
+    assert.ok(lines.every(line=>visibleWidth(line)<=width),
+      `overflow at ${width}`);
+    assert.ok(!lines.some(line=>line.includes("Wall time  0s")));
+    assert.equal(lines[0],"USAGE / OVERVIEW");
+  }
+  assert.ok(dashboardLines(120,st).some(x=>x.includes("MODEL / PROVIDER")));
+  assert.ok(dashboardLines(40,st).some(x=>x==="MODEL / PROVIDER"));
+  assert.equal(dashboardLineColor("SESSION TIMING", 5),"accent");
+  assert.equal(dashboardLineColor("No timing records for this branch.", 5),"warning");
+});
+
+test("missing post-compaction context is explicitly unknown", () => {
+ const state:DashboardState={
+   tab:"overview",sort:"recent",filter:"all",page:0,
+   usage:emptyUsage(),exchanges:[],contextPercent:null,
+   contextTokens:null,contextWindow:512000,provider:"canway",model:"gpt-6",
+ };
+ assert.ok(dashboardLines(100,state).some(x=>x.includes("--%")));
+ assert.ok(!dashboardLines(100,state).some(x=>x.includes("0.0%")));
 });

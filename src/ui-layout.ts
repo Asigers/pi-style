@@ -39,7 +39,7 @@ export function footerLines(width: number, state: FooterState): string[] {
   if (width < 1 || state.appearance === "off") return [];
   const known = typeof state.contextPercent === "number" && Number.isFinite(state.contextPercent)
     && state.contextPercent >= 0;
-  const percent = known ? Math.round(state.contextPercent!) + "%" : "--%";
+  const percent = known ? state.contextPercent!.toFixed(1) + "%" : "--%";
   const ctx = "CTX " + percent;
   const hasTokens = typeof state.contextTokens === "number" && Number.isFinite(state.contextTokens)
     && state.contextTokens >= 0;
@@ -125,6 +125,9 @@ export interface DashboardState {
   exchanges: ExchangeRecord[];
   globalRecords?: Array<ExchangeRecord & {project:string}>;
   contextPercent?: number | null;
+  contextTokens?: number | null;
+  contextWindow?: number | null;
+  provider: string;
   model: string;
 }
 
@@ -163,56 +166,143 @@ export function dailyTotals(exchanges: ExchangeRecord[]) {
   return [...map.entries()].sort(([a], [b]) => b.localeCompare(a));
 }
 
+/** Minimal, width-safe terminal analytics; returns no control sequences. */
 export function dashboardLines(width: number, state: DashboardState): string[] {
-  if (width < 1) return [];
-  const title = "USAGE / " + state.tab.toUpperCase();
-  const hint = "tab/1-4 view · j/k scroll · s sort · f filter · q/esc exit";
-  const rows: string[] = [title, "─".repeat(Math.max(1, Math.min(48, width))), `[1] Overview   [2] History   [3] Daily UTC   [4] Projects   (${state.tab})`, ""];
-  if (state.tab === "overview") {
+  if(width < 1) return [];
+  const narrow = width < 78;
+  const rows: string[] = [];
+  const add = (line = "") => rows.push(truncateToWidth(line, width, ""));
+  const rule = () => add("─".repeat(Math.min(width, 60)));
+  const tabs = narrow
+    ? ["1 Overview   2 History", "3 Daily UTC  4 Projects"]
+    : ["1 Overview   /   2 History   /   3 Daily UTC   /   4 Projects"];
+
+  const n = (value: number) => value.toLocaleString("en-US");
+  const pct = typeof state.contextPercent === "number" && Number.isFinite(state.contextPercent)
+    ? state.contextPercent.toFixed(1) + "%" : "--%";
+  const known = typeof state.contextTokens === "number" && Number.isFinite(state.contextTokens)
+    && typeof state.contextWindow === "number" && state.contextWindow > 0;
+  const contextCount = known ? shortTokens(state.contextTokens!) + "/" + shortTokens(state.contextWindow!) : "usage unknown";
+  const percent = typeof state.contextPercent === "number" && Number.isFinite(state.contextPercent)
+    ? Math.min(100, Math.max(0, state.contextPercent)) : 0;
+  const barSize = narrow ? Math.max(3, Math.min(width - 3, 18)) : 16;
+  const filled = Math.round(percent / 100 * barSize);
+  const bar = "━".repeat(filled) + "─".repeat(barSize - filled);
+  const providerModel = (state.provider || "unknown-provider") + " / " + (state.model || "unknown-model");
+
+  add("USAGE / " + state.tab.toUpperCase());
+  rule();
+  tabs.forEach(add);
+  add();
+
+  if(state.tab === "overview") {
     const totalTime = state.exchanges.reduce((sum, e) => sum + e.elapsedMs, 0);
     const avgMs = state.exchanges.length ? totalTime / state.exchanges.length : 0;
-    rows.push(
-      `Model      ${state.model}`,
-      `Input      ${state.usage.input.toLocaleString()}     Output ${state.usage.output.toLocaleString()}`,
-      `Cache read ${state.usage.cacheRead.toLocaleString()}     Cache write ${state.usage.cacheWrite.toLocaleString()}`,
-      `Cost       ~$${state.usage.cost.toFixed(4)} (Pi estimate)`,
-      `Context    ${typeof state.contextPercent === "number" ? state.contextPercent.toFixed(1) + "%" : "N/A"}`,
-      `Exchanges  ${state.exchanges.length}`,
-      `Wall time  ${fmtDuration(totalTime)}     Average ${fmtDuration(avgMs)}`,
-      "Note: branch-scoped, cached tokens separate; no raw prompts stored.",
-    );
-  } else if (state.tab === "history") {
+    if(!narrow) {
+      const leftWidth = Math.floor((width - 5) / 2);
+      const cell = (a: string, b: string) => add(
+        truncateToWidth(a, leftWidth, "").padEnd(leftWidth, " ") + " │ " + b,
+      );
+      cell("CONTEXT", "MODEL / PROVIDER");
+      cell("  " + pct + "  " + contextCount, "  " + providerModel);
+      cell("  " + bar, "");
+      add();
+      cell("TOKEN USAGE", "ESTIMATED COST");
+      cell("  Input        " + n(state.usage.input), "  ~$" + state.usage.cost.toFixed(4));
+      cell("  Output       " + n(state.usage.output), "  Pi usage metadata, not provider invoice");
+      cell("  Cache read   " + n(state.usage.cacheRead), "");
+      cell("  Cache write  " + n(state.usage.cacheWrite), "");
+    } else {
+      add("CONTEXT");
+      add("  " + pct + "  " + contextCount);
+      add("  " + bar);
+      add();
+      add("MODEL / PROVIDER");
+      add("  " + providerModel);
+      add();
+      add("TOKEN USAGE");
+      add("  Input        " + n(state.usage.input));
+      add("  Output       " + n(state.usage.output));
+      add("  Cache read   " + n(state.usage.cacheRead));
+      add("  Cache write  " + n(state.usage.cacheWrite));
+      add();
+      add("ESTIMATED COST");
+      add("  ~$" + state.usage.cost.toFixed(4) + " (Pi estimate)");
+    }
+    add();
+    add("SESSION TIMING");
+    if(state.exchanges.length === 0) {
+      add("  No timing records for this branch.");
+      add("  New completed requests will be tracked.");
+      add("  Historical Token usage cannot recover past duration.");
+    } else {
+      add("  Exchanges " + n(state.exchanges.length) + "   Total " + fmtDuration(totalTime)
+        + "   Average " + fmtDuration(avgMs));
+    }
+  } else if(state.tab === "history") {
     const history = filteredHistory(state.exchanges, state.filter, state.sort);
-    rows.push(`Sort: ${state.sort}   Filter: ${state.filter}   Rows: ${history.length}`);
-    if (!history.length) rows.push("No matching completed exchanges.");
-    for (const e of history.slice(state.page, state.page + 8)) {
-      const label = e.label ? ` · ${e.label}` : "";
-      rows.push(`${e.aborted ? "!" : "✓"} ${e.startedAt.slice(5, 16).replace("T", " ")} ${fmtDuration(e.elapsedMs)} ↓${fmtTokens(e.usage.output)} ${e.model}${label}`);
+    add("RECENT EXCHANGES   " + history.length + " recorded");
+    add("Sort " + state.sort + "  /  Filter " + state.filter);
+    add();
+    if(!history.length) {
+      add("No timing records match this filter.");
+      add("Pi only records durations for requests completed");
+      add("after installing this extension.");
+    } else {
+      for(const e of history.slice(state.page, state.page + (narrow ? 6 : 8))) {
+        const label = e.label ? "  " + e.label : "";
+        add((e.aborted ? "!" : "✓") + " " + e.startedAt.slice(5,16).replace("T", " ")
+          + "   " + fmtDuration(e.elapsedMs) + "   ↓" + fmtTokens(e.usage.output)
+          + "   " + e.model + label);
+      }
     }
   } else if(state.tab === "daily") {
     const daily = dailyTotals(state.globalRecords ?? state.exchanges);
-    if (!daily.length) rows.push("No completed exchanges yet.");
-    for (const [date, item] of daily.slice(state.page, state.page + 8)) {
-      rows.push(`${date}  ${item.count} turns  ${fmtDuration(item.elapsedMs)}  ${fmtTokens(item.usage.output)} out  ~$${item.usage.cost.toFixed(3)}`);
+    add("DAILY USAGE   UTC");
+    add();
+    if(!daily.length) {
+      add("No completed exchanges yet.");
+      add("Use /pi-global on to index future sessions.");
+    } else {
+      for(const [date, item] of daily.slice(state.page, state.page + 8)) {
+        add(date + "   " + item.count + " turns  " + fmtDuration(item.elapsedMs)
+          + "  ↓" + fmtTokens(item.usage.output) + "  ~$" + item.usage.cost.toFixed(3));
+      }
     }
   } else {
-    if(!state.globalRecords) rows.push("Enable /pi-global on for cross-session projects.");
-    else {
-      const groups = new Map<string, {count:number; elapsedMs:number; cost:number}>();
+    add("PROJECTS");
+    add();
+    if(!state.globalRecords) {
+      add("Cross-session metrics are disabled.");
+      add("Run /pi-global on to start local indexing.");
+    } else {
+      const groups = new Map<string,{count:number;elapsedMs:number;cost:number}>();
       for(const record of state.globalRecords) {
-        const current = groups.get(record.project) ?? {count:0, elapsedMs:0, cost:0};
-        current.count++;
-        current.elapsedMs += record.elapsedMs;
-        current.cost += record.usage.cost;
-        groups.set(record.project, current);
+        const prev = groups.get(record.project) ?? {count:0,elapsedMs:0,cost:0};
+        prev.count++;
+        prev.elapsedMs += record.elapsedMs;
+        prev.cost += record.usage.cost;
+        groups.set(record.project,prev);
       }
-      const ordered = [...groups.entries()].sort((a,b)=>b[1].elapsedMs-a[1].elapsedMs);
-      for(const [project, data] of ordered.slice(state.page, state.page + 8)) {
-        rows.push(`${project} · ${data.count} turns · ${fmtDuration(data.elapsedMs)} · ~$${data.cost.toFixed(3)}`);
+      const items=[...groups.entries()].sort((a,b)=>b[1].elapsedMs-a[1].elapsedMs);
+      if(!items.length) add("No indexed exchanges yet.");
+      for(const [project,data] of items.slice(state.page,state.page+8)) {
+        add(project + "   " + data.count + " turns   " + fmtDuration(data.elapsedMs)
+          + "   ~$" + data.cost.toFixed(3));
       }
-      if(!ordered.length) rows.push("No indexed exchanges yet.");
     }
   }
-  rows.push("", hint);
+  add();
+  add(narrow ? "1-4 tabs   j/k scroll   q exit" : "1-4 / Tab tabs   j/k scroll   s sort   f filter   q / Esc exit");
   return rows;
+}
+
+/** Semantic color for the terminal dashboard: section headings, dividers, and notices. */
+export function dashboardLineColor(line: string, index: number): "accent" | "border" | "muted" | "warning" | "text" {
+  if(index === 0) return "accent";
+  if(line.startsWith("─")) return "border";
+  if(/^(CONTEXT|MODEL \/ PROVIDER|TOKEN USAGE|ESTIMATED COST|SESSION TIMING|RECENT EXCHANGES|DAILY USAGE|PROJECTS)$/.test(line.trim())) return "accent";
+  if(line.includes("No timing records") || line.includes("Historical Token usage")) return "warning";
+  if(line.includes("tabs") || line.startsWith("1 Overview") || line.startsWith("3 Daily")) return "muted";
+  return "text";
 }
