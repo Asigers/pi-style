@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import { SessionStatsCache } from "../src/session-cache.ts";
 import {
@@ -392,7 +393,7 @@ export default function(pi: ExtensionAPI) {
           const sessionId=ctx.sessionManager.getSessionId();
           await appendIndexedExchange({
             ...record,
-            id: sessionId + ":" + record.startedAt + ":" + record.endedAt,
+            id: sessionId + ":" + randomUUID(),
             sessionId,
             project: ctx.cwd,
           });
