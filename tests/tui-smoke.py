@@ -51,8 +51,9 @@ def type_command(cmd):
 
 try:
     read_until("Border Collie", 25)
+    read_until("CTX --%", 10)
     type_command("/pi-tui")
-    read_until("usage atelier", 15)
+    read_until("USAGE / OVERVIEW", 15)
     os.write(fd, b"q")
     time.sleep(0.35)
     type_command("/pi-style off")
