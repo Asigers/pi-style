@@ -52,7 +52,9 @@ test("real TUI UI API paths restore original theme without persisting settings",
   const events=new Map<string, Function>();
   const shownStatuses:unknown[]=[];
   let modalRenderCount=0;
-  const fakeTui={requestRender:()=>{}};
+  let redraws=0;
+  let activeThinking="high";
+  const fakeTui={requestRender:()=>{redraws++;}};
   const theme={
     fg:(_color:string, value:string)=>value,
     bg:(_color:string,value:string)=>value,
@@ -88,6 +90,7 @@ test("real TUI UI API paths restore original theme without persisting settings",
   };
   const ctx={
     mode:"tui",hasUI:true,cwd:"/test",model:{id:"test"},
+    get thinkingLevel(){return activeThinking;},
     sessionManager:{
       getSessionId:()=> "test-session",getSessionName:()=> "性能排查",
       getLeafId:()=>String(entries.length),
@@ -115,6 +118,12 @@ test("real TUI UI API paths restore original theme without persisting settings",
   const previousScans=getBranchCalls;
   for(let i=0;i<100;i++) component.render(100);
   assert.equal(getBranchCalls,previousScans,"footer must not rescan session per frame");
+  assert.ok(component.render(100).join("").includes("THINK high"));
+  const redrawsBeforeThinkingChange=redraws;
+  activeThinking="xhigh";
+  await events.get("thinking_level_select")!({level:"xhigh",previousLevel:"high"},ctx);
+  assert.ok(redraws>redrawsBeforeThinkingChange,"thinking change must invalidate TUI footer");
+  assert.ok(component.render(100).join("").includes("THINK xhigh"),"footer must reflect effective current level");
   await commands.get("pi-tui")!.handler("",ctx);
   assert.equal(modalRenderCount,1);
   await commands.get("pi-style")!.handler("off",ctx);

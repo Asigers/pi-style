@@ -9,6 +9,8 @@ export interface FooterState {
   appearance: Appearance;
   provider: string;
   model: string;
+  /** Pi effective session thinking level, including off. */
+  thinkingLevel?: string;
   /** Explicit user-assigned session name; absent for unnamed conversations. */
   sessionTitle?: string;
   /** Estimated current context use from Pi. Null/undefined means unknown. */
@@ -53,8 +55,10 @@ export function footerLines(width: number, state: FooterState): string[] {
   const provider = state.provider.trim() || "unknown-provider";
   const model = state.model.trim() || "unknown-model";
   const identity = provider + "/" + model;
-  // Only use explicit /name titles; never generate titles from prompts, paths or IDs.
-  // Session names are user-controlled, so strip control sequences and newlines.
+  // Pi's effective thinking level is authoritative; "off" is a real level.
+  const thinking = "THINK " + (state.thinkingLevel?.trim() || "--");
+
+  // Show only explicitly named sessions; protect terminal control sequences.
   const rawTitle = (state.sessionTitle ?? "")
     .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "")
     .replace(/[\x00-\x1f\x7f-\x9f]/g, " ")
@@ -62,48 +66,65 @@ export function footerLines(width: number, state: FooterState): string[] {
   const title = rawTitle ? safe(rawTitle, Math.min(36, width)) : undefined;
   const duration = state.elapsedMs === undefined ? undefined : clock(state.elapsedMs);
   const cost = "~$" + state.usage.cost.toFixed(3);
-  // Session title is useful current-state metadata; token totals are not.
-  // Detailed input/output/cache totals remain in /pi-tui and /pi-usage.
-  const extras = [title, duration, cost].filter((v): v is string => !!v);
-  const make = (context: string, optional: string[]) => [context, identity, ...optional].join(sep);
+  const optional = [title, duration, cost].filter((v): v is string => !!v);
 
-  if (width >= 50) {
-    if (fits(make(ctxFull, extras), width)) return [make(ctxFull, extras)];
-    if (fits(make(ctx, extras), width)) return [make(ctx, extras)];
-
-    // Prefer two tidy rows to silently dropping an explicitly named session.
-    if (title && fits(make(ctxFull, []), width)) {
-      const second = [title];
-      for (const extra of [duration, cost]) {
-        if (extra && fits([...second, extra].join(sep), width)) second.push(extra);
+  const join = (parts: readonly string[]) => parts.join(sep);
+  const mandatory = (context: string) => [context, identity, thinking];
+  if(width >= 50) {
+    // Cost and duration disappear first. Prefer keeping an explicit session title.
+    const minimumOptional = title ? 1 : 0;
+    for(const context of [ctxFull, ctx]) {
+      for(let count=optional.length; count>=minimumOptional; count--) {
+        const line=join([...mandatory(context), ...optional.slice(0,count)]);
+        if(fits(line,width)) return [line];
       }
-      return [make(ctxFull, []), second.join(sep)];
     }
-    // Otherwise keep one line where possible, dropping lower-priority fields:
-    // cost, duration, and only then the optional session title.
-    for (let count = extras.length - 1; count >= 0; count--) {
-      if (fits(make(ctx, extras.slice(0, count)), width)) return [make(ctx, extras.slice(0, count))];
+    // With no title, try the compact core alone before using extra rows.
+    if(!title) {
+      for(const context of [ctxFull,ctx]) {
+        const core=join(mandatory(context));
+        if(fits(core,width)) return [core];
+      }
     }
   }
 
-  // Mandatory context and model/provider need two rows in narrow terminals.
-  if (fits(identity, width)) {
-    const first = fits(ctxFull, width) ? ctxFull : ctx;
-    const second = [identity];
-    if (title && fits([identity, title].join(sep), width)) second.push(title);
-    return [safe(first, width), second.join(sep)];
+  // Two-line fallback: the identity and thinking level remain adjacent where possible.
+  const identityThinking = join([identity, thinking]);
+  if(fits(identityThinking,width)) {
+    let first=fits(ctxFull,width) ? ctxFull : ctx;
+    if(title) {
+      const space=width-visibleWidth(identityThinking)-visibleWidth(sep);
+      if(space>=4) {
+        const second=join([identityThinking,safe(title,space)]);
+        for(const extra of [duration,cost]) {
+          if(width >= 50 && extra && fits(join([first,extra]),width)) first=join([first,extra]);
+        }
+        return [safe(first,width),second];
+      }
+      // Otherwise show the title on the context row if it fits.
+      const titleRow=join([first,title]);
+      if(fits(titleRow,width)) first=titleRow;
+    } else {
+      for(const extra of [duration,cost]) {
+        if(width >= 50 && extra && fits(join([first,extra]),width)) first=join([first,extra]);
+      }
+    }
+    return [safe(first,width),identityThinking];
   }
 
-  // Extremely long model IDs: put context and provider on the first row.
-  const providerLine = ctx + sep + provider;
-  if (fits(providerLine, width)) {
-    const second = [model];
-    if (title && fits([model, title].join(sep), width)) second.push(title);
-    return [providerLine, safe(second.join(sep), width)];
+  // Keep THINK even at narrow widths by moving it alongside context.
+  const topFull=join([ctxFull,thinking]);
+  const topShort=join([ctx,thinking]);
+  if(fits(identity,width)) {
+    const first=fits(topFull,width) ? topFull : fits(topShort,width) ? topShort : ctx;
+    return [safe(first,width),identity];
   }
 
-  // Not physically possible to fit all mandatory values in only two rows.
-  return [safe(ctx, width), safe(identity, width)];
+  // Very long provider/model IDs: do not invent missing identity or thinking.
+  // A two-row terminal cannot show every field if values exceed physical width.
+  const shortWithThinking=join([ctx,thinking]);
+  const first=fits(shortWithThinking,width) ? shortWithThinking : ctx;
+  return [safe(first,width),safe(identity,width)];
 }
 
 /** Compatibility for RPC status, which accepts a single line only. */
