@@ -59,10 +59,14 @@ export function footerLines(width: number, state: FooterState): string[] {
   // Keep all data on one line whenever it fits. When it does not, progressively
   // drop *optional* items (cost first, then clock, then token tally).
   const make = (context: string, optional: string[]) => [context, identity, ...optional].join(sep);
-  if (fits(make(ctxFull, extras), width)) return [make(ctxFull, extras)];
-  if (fits(make(ctx, extras), width)) return [make(ctx, extras)];
-  for (let count = extras.length - 1; count >= 0; count--) {
-    if (fits(make(ctx, extras.slice(0, count)), width)) return [make(ctx, extras.slice(0, count))];
+  // In narrow terminals the core is intentionally split across two lines,
+  // even if removing every optional field could squeeze it into one.
+  if (width >= 50) {
+    if (fits(make(ctxFull, extras), width)) return [make(ctxFull, extras)];
+    if (fits(make(ctx, extras), width)) return [make(ctx, extras)];
+    for (let count = extras.length - 1; count >= 0; count--) {
+      if (fits(make(ctx, extras.slice(0, count)), width)) return [make(ctx, extras.slice(0, count))];
+    }
   }
 
   // Core data cannot fit together: use at most two lines, retaining the full
