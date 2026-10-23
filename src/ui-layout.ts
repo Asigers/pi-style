@@ -42,11 +42,17 @@ export function footerText(width: number, state: FooterState): string {
 
 export function headerLines(width: number): string[] {
   if (width < 32) return [];
-  if (width < 58) return ["  ♡ pi-style", "  ✦ small steps, big ideas"];
+  if (width < 58) return ["  ♡ pi-style", "  ✦ Border Collie"];
+  // A one-floppy-ear Border Collie with dark eye patches and a white blaze.
+  // Keep the artwork plain text; Pi's caller truncates to terminal width.
   return [
-    "     /\\_/\\",
-    "    ( o.o )   ♡ pi-style",
-    "     > ^ <    ✦ small steps, big ideas",
+    "       /\\       __",
+    "      /  \\_____/  \\__",
+    "     / ██  /\\  ██   \\_",
+    "    |   ● /  \\ ●    |  ♡ pi-style",
+    "    |      ▽        |  ✦ Border Collie",
+    "     \\   \\____/    /",
+    "      \\____________/",
     "",
   ];
 }
