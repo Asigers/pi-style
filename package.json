@@ -1,6 +1,6 @@
 {
   "name": "@asigers/pi-style",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "Single-palette cute TUI and usage analytics for Pi Coding Agent",
   "type": "module",
