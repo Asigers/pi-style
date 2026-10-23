@@ -10,11 +10,17 @@ test("records one settled exchange including usage and timing, and restores hist
   const statuses: Array<string | undefined> = [];
   const widgets: unknown[] = [];
 
+  let getBranchCalls = 0;
   const ctx = {
     hasUI: true,
     mode: "rpc",
     model: { id: "test-model" },
-    sessionManager: { getBranch: () => entries },
+    sessionManager: {
+      getSessionId: () => "test-session",
+      getLeafId: () => String(entries.length),
+      getEntryCount: () => entries.length,
+      getBranch: () => { getBranchCalls++; return entries; },
+    },
     getContextUsage: () => ({ percent: 25 }),
     ui: {
       setStatus: (_key: string, value?: string) => statuses.push(value),
@@ -58,6 +64,7 @@ test("records one settled exchange including usage and timing, and restores hist
   assert.ok(saved.data.elapsedMs >= 0);
   assert.ok(saved.data.firstOutputMs >= 0);
   assert.ok(statuses.at(-1)?.includes("✓"));
+  assert.equal(saved.data.timingBasis, "agent-start");
 
   await commands.get("pi-history")!.handler("", ctx);
   assert.ok(Array.isArray(widgets.at(-1)));
@@ -66,6 +73,11 @@ test("records one settled exchange including usage and timing, and restores hist
   await send("session_start", { reason: "resume" });
   await commands.get("pi-usage")!.handler("", ctx);
   assert.ok(statuses.at(-1)?.includes("↑12"));
+
+  const callsBefore = getBranchCalls;
+  await commands.get("pi-usage")!.handler("", ctx);
+  await commands.get("pi-usage")!.handler("", ctx);
+  assert.equal(getBranchCalls, callsBefore, "unchanged session cache should avoid getBranch rescans");
 
   await commands.get("pi-style")!.handler("off", ctx);
   assert.equal(statuses.at(-1), undefined);
@@ -84,7 +96,7 @@ test("custom extension-initiated runs are not counted as user requests", async (
   const ctx = {
     hasUI: false,
     model: { id: "test" },
-    sessionManager: { getBranch: () => [] },
+    sessionManager: {getSessionId: () => "x", getLeafId: () => null, getEntryCount: () => 0, getBranch: () => []},
   };
   await handlers.get("session_start")!({}, ctx);
   await handlers.get("before_agent_start")!({ messageType: "custom" }, ctx);
