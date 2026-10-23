@@ -16,7 +16,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --experimental-strip-types --test tests/metrics.test.ts tests/extension.test.ts tests/ui-layout.test.ts tests/theme.test.ts"
+    "test": "node --experimental-strip-types --test tests/metrics.test.ts tests/extension.test.ts tests/ui-layout.test.ts tests/theme.test.ts tests/global-store.test.ts"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
