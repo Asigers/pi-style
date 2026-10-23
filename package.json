@@ -1,0 +1,19 @@
+{
+  "name": "@asigers/pi-style",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cute token, cost and exchange timing tracker for Pi Coding Agent",
+  "type": "module",
+  "license": "MIT",
+  "keywords": ["pi-package", "pi-coding-agent", "pi-extension", "terminal", "tokens"],
+  "engines": {"node": ">=22"},
+  "scripts": {
+    "test": "node --experimental-strip-types --test tests/*.test.ts"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "pi": {
+    "extensions": ["./extensions/pi-style.ts"]
+  }
+}
