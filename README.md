@@ -7,9 +7,13 @@ A single-palette **cute terminal skin + usage atelier** for [Pi Coding Agent](ht
 ## Screenshot-style preview
 
 ```text
-     /\_/\
-    ( o.o )   ♡ pi-style
-     > ^ <    ✦ small steps, big ideas
+       /\       __
+      /  \_____/  \__
+     / ██  /\  ██   \_
+    |   ● /  \ ●    |  ♡ pi-style
+    |      ▽        |  ✦ Border Collie
+     \   \____/    /
+      \____________/
 
 ♡ pi-style · gpt-6 · ↑12.5k ↓1.2k · cache 34.0k/0 · ~$0.120 · ✦ 1m 2s
 ```
@@ -36,11 +40,11 @@ pi -e ./extensions/pi-style.ts --theme ./themes/pi-style-blush.json
 
 | Command | Purpose |
 | --- | --- |
-| `/pi-style cute` | Enable Blush theme, optional kitten header, footer and input marker |
+| `/pi-style cute` | Enable Blush theme, optional Border Collie header, footer and input marker |
 | `/pi-style compact` | Compact stats footer, hide header/editor decorations |
 | `/pi-style off` | Restore built-in header/footer/editor and previous theme; metrics continue |
 | `/pi-style theme` | Select the sole theme (`pi-style-blush`) |
-| `/pi-style header on/off` | Show/hide kitten startup header |
+| `/pi-style header on/off` | Show/hide Border Collie startup header |
 | `/pi-style editor on/off` | Show/hide the cute editor border marker |
 | `/pi-style quiet on/off` | Collapse/restore built-in tool outputs (no tool content changes) |
 | `/pi-style motion on/off` | Animate/reduce footer heart motion (off by default) |

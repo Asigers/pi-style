@@ -24,6 +24,10 @@ test("responsive status progressively loses ornaments and detail", () => {
   assert.deepEqual(headerLines(20),[]);
   assert.equal(headerLines(44).length,2);
   assert.ok(headerLines(80).length>=3);
+  assert.ok(headerLines(80).some(line=>line.includes("Border Collie")));
+  assert.ok(headerLines(80).some(line=>line.includes("██")));
+  assert.ok(headerLines(44).some(line=>line.includes("Border Collie")));
+  assert.ok(!headerLines(80).join("\\n").includes("o.o"));
 });
 
 function sample(date:string,elapsedMs:number,output:number,aborted=false):ExchangeRecord {
