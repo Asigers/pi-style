@@ -39,7 +39,7 @@ export function footerLines(width: number, state: FooterState): string[] {
   if (width < 1 || state.appearance === "off") return [];
   const known = typeof state.contextPercent === "number" && Number.isFinite(state.contextPercent)
     && state.contextPercent >= 0;
-  const percent = known ? Math.round(state.contextPercent!) + "%" : "--%";
+  const percent = known ? state.contextPercent!.toFixed(1) + "%" : "--%";
   const ctx = "CTX " + percent;
   const hasTokens = typeof state.contextTokens === "number" && Number.isFinite(state.contextTokens)
     && state.contextTokens >= 0;
