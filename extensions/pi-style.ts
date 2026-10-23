@@ -630,7 +630,7 @@ export default function(pi: ExtensionAPI) {
         let sort: HistorySort = "recent";
         let filter: HistoryFilter = "all";
         let page = 0;
-        const tabs: DashboardTab[] = ["overview","history","daily","projects"];
+        const tabs: DashboardTab[] = ["overview","performance","history","daily","projects"];
         const sorts: HistorySort[] = ["recent","slowest","tokens"];
         const filters: HistoryFilter[] = ["all","success","aborted"];
         const component = {
@@ -652,7 +652,7 @@ export default function(pi: ExtensionAPI) {
           },
           handleInput(data: string) {
             if(data === "q" || matchesKey(data, "escape")) { done(); return; }
-            if(data === "1" || data === "2" || data === "3" || data === "4") {
+            if(["1","2","3","4","5"].includes(data)) {
               tab = tabs[Number(data)-1]!; page = 0;
             } else if(matchesKey(data, "tab") || matchesKey(data, "right")) {
               tab = tabs[(tabs.indexOf(tab)+1)%tabs.length]!; page = 0;
