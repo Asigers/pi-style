@@ -129,6 +129,15 @@ test("real TUI UI API paths restore original theme without persisting settings",
   assert.equal(writes.length,0);
   await commands.get("pi-style")!.handler("theme",ctx);
   assert.equal(writes.length,0,"explicit theme command must not persist settings");
+  // Upstream rebind calls applyFromSettings() AFTER extension session_start.
+  // Verify the scheduled in-memory reapply wins without touching persisted settings.
+  await events.get("session_start")!({reason:"resume"},ctx);
+  currentTheme=originalTheme; // simulate Pi's trailing applyFromSettings()
+  await new Promise(resolve=>setTimeout(resolve,15));
+  assert.equal(currentTheme,blush,"theme is re-applied after resume");
+  await commands.get("pi-style")!.handler("off",ctx);
+  assert.equal(currentTheme,originalTheme,"turning off after resume restores original");
+  assert.equal(writes.length,0);
   await events.get("session_shutdown")!({},ctx);
 });
 
