@@ -9,6 +9,8 @@ export interface FooterState {
   appearance: Appearance;
   provider: string;
   model: string;
+  /** Explicit user-assigned session name; absent for unnamed conversations. */
+  sessionTitle?: string;
   /** Estimated current context use from Pi. Null/undefined means unknown. */
   contextPercent?: number | null;
   contextTokens?: number | null;
@@ -51,47 +53,56 @@ export function footerLines(width: number, state: FooterState): string[] {
   const provider = state.provider.trim() || "unknown-provider";
   const model = state.model.trim() || "unknown-model";
   const identity = provider + "/" + model;
-  const tokens = "↑" + shortTokens(state.usage.input) + " ↓" + shortTokens(state.usage.output);
+  // Only use explicit /name titles; never generate titles from prompts, paths or IDs.
+  // Session names are user-controlled, so strip control sequences and newlines.
+  const rawTitle = (state.sessionTitle ?? "")
+    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "")
+    .replace(/[\x00-\x1f\x7f-\x9f]/g, " ")
+    .trim();
+  const title = rawTitle ? safe(rawTitle, Math.min(36, width)) : undefined;
   const duration = state.elapsedMs === undefined ? undefined : clock(state.elapsedMs);
   const cost = "~$" + state.usage.cost.toFixed(3);
-  const extras = [tokens, duration, cost].filter((v): v is string => !!v);
-
-  // Keep all data on one line whenever it fits. When it does not, progressively
-  // drop *optional* items (cost first, then clock, then token tally).
+  // Session title is useful current-state metadata; token totals are not.
+  // Detailed input/output/cache totals remain in /pi-tui and /pi-usage.
+  const extras = [title, duration, cost].filter((v): v is string => !!v);
   const make = (context: string, optional: string[]) => [context, identity, ...optional].join(sep);
-  // In narrow terminals the core is intentionally split across two lines,
-  // even if removing every optional field could squeeze it into one.
+
   if (width >= 50) {
     if (fits(make(ctxFull, extras), width)) return [make(ctxFull, extras)];
     if (fits(make(ctx, extras), width)) return [make(ctx, extras)];
+
+    // Prefer two tidy rows to silently dropping an explicitly named session.
+    if (title && fits(make(ctxFull, []), width)) {
+      const second = [title];
+      for (const extra of [duration, cost]) {
+        if (extra && fits([...second, extra].join(sep), width)) second.push(extra);
+      }
+      return [make(ctxFull, []), second.join(sep)];
+    }
+    // Otherwise keep one line where possible, dropping lower-priority fields:
+    // cost, duration, and only then the optional session title.
     for (let count = extras.length - 1; count >= 0; count--) {
       if (fits(make(ctx, extras.slice(0, count)), width)) return [make(ctx, extras.slice(0, count))];
     }
   }
 
-  // Core data cannot fit together: use at most two lines, retaining the full
-  // provider and model where physically possible. Never drop CTX or identity.
+  // Mandatory context and model/provider need two rows in narrow terminals.
   if (fits(identity, width)) {
-    const firstParts = [ctxFull, ...extras];
-    while (firstParts.length > 1 && !fits(firstParts.join(sep), width)) firstParts.pop();
-    if (!fits(firstParts[0]!, width)) firstParts[0] = ctx;
-    return [safe(firstParts.join(sep), width), identity];
+    const first = fits(ctxFull, width) ? ctxFull : ctx;
+    const second = [identity];
+    if (title && fits([identity, title].join(sep), width)) second.push(title);
+    return [safe(first, width), second.join(sep)];
   }
 
-  // Long identity: move the provider alongside context and give the model the
-  // second line. This avoids cutting long model IDs at 40-60 columns.
+  // Extremely long model IDs: put context and provider on the first row.
   const providerLine = ctx + sep + provider;
   if (fits(providerLine, width)) {
-    const line2 = [model];
-    for (const item of extras) {
-      if (fits([...line2, item].join(sep), width)) line2.push(item);
-      else break;
-    }
-    return [providerLine, safe(line2.join(sep), width)];
+    const second = [model];
+    if (title && fits([model, title].join(sep), width)) second.push(title);
+    return [providerLine, safe(second.join(sep), width)];
   }
 
-  // Extremely narrow terminals / very long provider names cannot display
-  // all of three mandatory values in two lines. Truncate as a last resort.
+  // Not physically possible to fit all mandatory values in only two rows.
   return [safe(ctx, width), safe(identity, width)];
 }
 

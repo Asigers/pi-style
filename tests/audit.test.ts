@@ -89,7 +89,7 @@ test("real TUI UI API paths restore original theme without persisting settings",
   const ctx={
     mode:"tui",hasUI:true,cwd:"/test",model:{id:"test"},
     sessionManager:{
-      getSessionId:()=> "test-session",
+      getSessionId:()=> "test-session",getSessionName:()=> "性能排查",
       getLeafId:()=>String(entries.length),
       getEntryCount:()=>entries.length,
       getBranch:()=>{getBranchCalls++;return entries;},
@@ -148,7 +148,7 @@ test("queued user messages produce separate timing records, with shared-run attr
   const ctx={
     hasUI:false,mode:"print",cwd:"/test",model:{id:"test"},
     sessionManager:{
-      getSessionId:()=> "s",
+      getSessionId:()=> "s",getSessionName:()=> undefined,
       getLeafId:()=>String(entries.length),
       getEntryCount:()=>entries.length,
       getBranch:()=>entries,
@@ -204,7 +204,7 @@ test("reload does not warn while theme registry is unavailable, then restores Fo
   };
   const ctx={
     hasUI:true,mode:"tui",cwd:"/test",model:{id:"test",provider:"canway"},
-    sessionManager:{getSessionId:()=>"test",getLeafId:()=>null,getBranch:()=>data},
+    sessionManager:{getSessionId:()=>"test",getSessionName:()=> undefined,getLeafId:()=>null,getBranch:()=>data},
     getContextUsage:()=>({percent:23.7,tokens:121500,contextWindow:512000}),
     ui,
   };

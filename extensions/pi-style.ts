@@ -103,6 +103,7 @@ export default function(pi: ExtensionAPI) {
       ctx.ui.setStatus(KEY, footerText(100, {
         appearance, provider: ctx.model?.provider ?? "unknown-provider",
         model: ctx.model?.id ?? active?.model ?? "unknown-model",
+        sessionTitle: ctx.sessionManager.getSessionName(),
         contextPercent: ctx.getContextUsage()?.percent,
         contextTokens: ctx.getContextUsage()?.tokens,
         contextWindow: ctx.getContextUsage()?.contextWindow,
@@ -219,6 +220,7 @@ export default function(pi: ExtensionAPI) {
               appearance,
               provider: ctx.model?.provider ?? "unknown-provider",
               model: ctx.model?.id ?? active?.model ?? "unknown-model",
+        sessionTitle: ctx.sessionManager.getSessionName(),
               contextPercent: context?.percent,
               contextTokens: context?.tokens,
               contextWindow: context?.contextWindow,

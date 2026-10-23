@@ -27,7 +27,8 @@ test("width-aware context-first footer keeps provider and model, removing low-pr
   }
   assert.equal(footerLines(120,base).length,1);
   assert.ok(footerLines(120,base)[0]?.includes("42.0% 84k/200k"));
-  assert.ok(footerLines(120,base)[0]?.includes("↑128k ↓18.6k"));
+  assert.ok(!footerLines(120,base).join("").includes("↑"));
+  assert.ok(!footerLines(120,base).join("").includes("↓"));
   assert.ok(footerLines(120,base)[0]?.includes("01:24"));
   assert.ok(footerLines(120,base)[0]?.includes("~$0.145"));
   assert.equal(footerLines(40,base).length,2);
@@ -125,4 +126,35 @@ test("missing post-compaction context is explicitly unknown", () => {
  };
  assert.ok(dashboardLines(100,state).some(x=>x.includes("--%")));
  assert.ok(!dashboardLines(100,state).some(x=>x.includes("0.0%")));
+});
+
+test("session title replaces token counters without hiding required context and identity", () => {
+  const named={...base,sessionTitle:"修复 Django 慢查询"};
+  for (const width of [120,100,80,65,55,45,40,28]) {
+    const lines=footerLines(width,named);
+    assert.ok(lines.length<=2 && lines.length>=1);
+    assert.ok(lines.some(line=>line.includes("CTX")));
+    assert.ok(lines.some(line=>line.includes("newapi")));
+    assert.ok(lines.some(line=>line.includes("gpt-6")));
+    assert.ok(lines.every(line=>visibleWidth(line)<=width));
+    assert.ok(!lines.some(line=>/[↑↓]/.test(line)), "no cumulative token arrows in footer");
+  }
+  assert.ok(footerLines(120,named).join("").includes("修复 Django 慢查询"));
+  assert.ok(footerLines(65,named).join("").includes("修复 Django 慢查询"));
+  assert.ok(footerLines(80,named).length<=2);
+  assert.ok(footerLines(120,{...base,sessionTitle:undefined})
+    .join("").includes("newapi/gpt-6-long-context"));
+  assert.ok(!footerLines(120,{...base,sessionTitle:undefined}).join("").includes("SESSION"));
+});
+
+test("long /name sessions sanitize control sequences and truncate to 36 terminal cells", () => {
+  const title="修复异常-精确定位重试与用户输入法问题-继续确认Provider模型集成";
+  const lines=footerLines(110,{...base,sessionTitle:title});
+  assert.ok(lines.length<=2);
+  assert.ok(lines.some(line=>line.includes("修复异常")));
+  assert.ok(lines.every(line=>visibleWidth(line)<=110));
+  assert.ok(!footerLines(120,{...base,sessionTitle:"    "}).some(line=>line.includes("SESSION")));
+  const control=footerLines(120,{...base,sessionTitle:"恶意" + String.fromCharCode(27) + "[31m标题\n下一行"});
+  assert.ok(!control.join("").includes(String.fromCharCode(27)));
+  assert.ok(control.every(line=>visibleWidth(line)<=120));
 });

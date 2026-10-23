@@ -1,6 +1,6 @@
 {
   "name": "@asigers/pi-style",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "description": "Forest Night TUI with context-first status and local usage analytics for Pi Coding Agent",
   "type": "module",
