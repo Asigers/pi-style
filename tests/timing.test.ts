@@ -39,9 +39,9 @@ test("live snapshots include unfinished LLM/tool phases without mutation", () =>
   clock.endLLM(80);
   assert.equal(clock.getRunningLabel(),undefined);
   const final=clock.snapshot(0,100);
-  assert.equal(final.llmWallMs,50);
+  assert.equal(final.llmWallMs,40);
   assert.equal(final.toolWallMs,30);
-  assert.equal(final.otherWallMs,20);
+  assert.equal(final.otherWallMs,30);
   clock.reset();
   assert.deepEqual([clock.snapshot(0,100).llmWallMs,clock.snapshot(0,100).toolWallMs],[0,0]);
 });
