@@ -17,6 +17,7 @@ test("records one settled exchange including usage and timing, and restores hist
     model: { id: "test-model" },
     sessionManager: {
       getSessionId: () => "test-session",
+      getSessionName: () => "性能排查",
       getLeafId: () => String(entries.length),
       getEntryCount: () => entries.length,
       getBranch: () => { getBranchCalls++; return entries; },
@@ -96,7 +97,7 @@ test("custom extension-initiated runs are not counted as user requests", async (
   const ctx = {
     hasUI: false,
     model: { id: "test" },
-    sessionManager: {getSessionId: () => "x", getLeafId: () => null, getEntryCount: () => 0, getBranch: () => []},
+    sessionManager: {getSessionId: () => "x", getSessionName: () => undefined, getLeafId: () => null, getEntryCount: () => 0, getBranch: () => []},
   };
   await handlers.get("session_start")!({}, ctx);
   await handlers.get("before_agent_start")!({ messageType: "custom" }, ctx);
