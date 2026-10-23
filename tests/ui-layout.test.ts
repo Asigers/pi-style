@@ -184,3 +184,30 @@ test("thinking takes priority over named-session decoration and cost on narrow w
   assert.ok(lines.every(x=>visibleWidth(x)<=40));
   assert.ok(!lines.join("").includes("~$"));
 });
+
+test("Performance view partitions LLM/tool/other time and labels slow operations", () => {
+ const perf={...sample("2026-10-23T08:00:00.000Z",100000,120),
+   llmWallMs:56000,toolWallMs:31000,otherWallMs:13000,
+   llmCalls:3,toolExecutions:4,firstOutputMs:1700,
+   slowOps:[{phase:"llm" as const,name:"LLM #2",durationMs:28300},
+            {phase:"tool" as const,name:"bash",durationMs:20600}]};
+ const state:DashboardState={tab:"performance",sort:"recent",filter:"all",
+   page:0,usage:emptyUsage(),exchanges:[perf],model:"test",provider:"canway"};
+ for(const width of [120,80,70,40,24]) {
+   const lines=dashboardLines(width,state);
+   assert.ok(lines[0]?.includes("USAGE / PERFORMANCE"));
+   assert.ok(lines.some(x=>x.includes("LLM")));
+   assert.ok(lines.some(x=>x.includes("TOOLS")));
+   assert.ok(lines.every(x=>visibleWidth(x)<=width));
+ }
+ const long=dashboardLines(100,state).join("\n");
+ for(const expected of ["56.0s","31.0s","13.0s","LLM #2","bash"])
+   assert.ok(long.includes(expected),expected);
+});
+
+test("historical entries do not claim phase durations", () => {
+ const state:DashboardState={tab:"performance",sort:"recent",filter:"all",
+   page:0,usage:emptyUsage(),exchanges:[sample("2026-10-21T11:00:00.000Z",1000,4)],
+   provider:"test",model:"test"};
+ assert.ok(dashboardLines(80,state).some(x=>x.includes("No phase timings")));
+});

@@ -1,18 +1,16 @@
 /**
- * Decorative-only input editor. All input handling stays in Pi's CustomEditor:
- * no keyboard remapping, cursor interception, or IME changes.
+ * A restrained input frame that preserves Pi's editor cursor, composition,
+ * paste and working-status layout. Only the top border is styled.
  */
 import { CustomEditor } from "@earendil-works/pi-coding-agent";
-import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { visibleWidth } from "@earendil-works/pi-tui";
 
 export class CuteEditor extends CustomEditor {
-  render(width: number): string[] {
-    const lines = super.render(width);
-    if (width < 30 || lines.length === 0) return lines;
-    const last = lines.length - 1;
-    const label = width >= 55 ? " │ " : " │ ";
-    const space = Math.max(0, width - visibleWidth(label));
-    lines[last] = truncateToWidth(lines[last] ?? "", space, "") + label;
-    return lines;
+  protected override renderTopBorder(width: number, hiddenLineCount: number): string {
+    // Avoid replacing Pi's in-border working status or scrolling indicators.
+    if(width < 44 || hiddenLineCount > 0 || this.embedWorkingStatus)
+      return super.renderTopBorder(width,hiddenLineCount);
+    const label="── INPUT ";
+    return this.borderColor(label + "─".repeat(Math.max(0,width-visibleWidth(label))));
   }
 }

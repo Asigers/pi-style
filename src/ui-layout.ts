@@ -1,7 +1,7 @@
 import { fmtDuration, fmtTokens, type ExchangeRecord, type Usage } from "./metrics.ts";
 
 export type Appearance = "cute" | "compact" | "off";
-export type DashboardTab = "overview" | "history" | "daily" | "projects";
+export type DashboardTab = "overview" | "performance" | "history" | "daily" | "projects";
 export type HistorySort = "recent" | "slowest" | "tokens";
 export type HistoryFilter = "all" | "success" | "aborted";
 
@@ -206,8 +206,8 @@ export function dashboardLines(width: number, state: DashboardState): string[] {
   const add = (line = "") => rows.push(truncateToWidth(line, width, ""));
   const rule = () => add("─".repeat(Math.min(width, 60)));
   const tabs = narrow
-    ? ["1 Overview   2 History", "3 Daily UTC  4 Projects"]
-    : ["1 Overview   /   2 History   /   3 Daily UTC   /   4 Projects"];
+    ? ["1 Overview  2 Performance", "3 History  4 Daily  5 Projects"]
+    : ["1 Overview  /  2 Performance  /  3 History  /  4 Daily  /  5 Projects"];
 
   const n = (value: number) => value.toLocaleString("en-US");
   const pct = typeof state.contextPercent === "number" && Number.isFinite(state.contextPercent)
@@ -271,6 +271,46 @@ export function dashboardLines(width: number, state: DashboardState): string[] {
       add("  Exchanges " + n(state.exchanges.length) + "   Total " + fmtDuration(totalTime)
         + "   Average " + fmtDuration(avgMs));
     }
+  } else if(state.tab === "performance") {
+    add("PERFORMANCE / LAST RUN");
+    const last=state.exchanges.at(-1);
+    if(!last || last.llmWallMs===undefined || last.toolWallMs===undefined ||
+      last.otherWallMs===undefined) {
+      add();
+      add("No phase timings recorded for this branch.");
+      add("Complete a new request to measure LLM vs tools.");
+      add("Older session entries cannot be backfilled.");
+    } else {
+      const wall=Math.max(1,last.elapsedMs);
+      const seconds=(n:number)=>(n/1000).toFixed(1)+"s";
+      const makeRow=(name:string,ms:number)=> {
+        const pct=Math.round(ms/wall*100);
+        const barWidth=Math.max(4,Math.min(width-30,narrow?16:28));
+        const filled=Math.max(0,Math.min(barWidth,Math.round(ms/wall*barWidth)));
+        add(name.padEnd(7)+" "+ "━".repeat(filled)+"─".repeat(barWidth-filled)+
+          " "+seconds(ms)+"  "+pct+"%");
+      };
+      add("WALL TIME  "+seconds(last.elapsedMs));
+      add("Observed phases; concurrent and nested tools counted once.");
+      add();
+      makeRow("LLM",last.llmWallMs);
+      makeRow("TOOLS",last.toolWallMs);
+      makeRow("OTHER",last.otherWallMs);
+      add();
+      add("LLM CALLS  "+(last.llmCalls ?? "--")+"    TOOL CALLS  "+(last.toolExecutions ?? last.toolCalls));
+      if(typeof last.firstOutputMs==="number") add("FIRST OUTPUT  "+seconds(last.firstOutputMs));
+      add();
+      add("SLOWEST OPERATIONS");
+      const top=last.slowOps ?? [];
+      if(!top.length) add("No individual operation spans recorded.");
+      for(const op of top.slice(0,narrow?3:5)) {
+        add("  "+op.phase.toUpperCase().padEnd(4)+"  "+op.name+"  "+seconds(op.durationMs));
+      }
+      add();
+      add("LLM wall includes pre-stream preparation; not pure network latency.");
+      add("Legacy modelMs/toolMs are cumulative and may overlap.");
+      if(last.sharedRun) add("Shared run: attribution between queued messages is approximate.");
+    }
   } else if(state.tab === "history") {
     const history = filteredHistory(state.exchanges, state.filter, state.sort);
     add("RECENT EXCHANGES   " + history.length + " recorded");
@@ -325,7 +365,7 @@ export function dashboardLines(width: number, state: DashboardState): string[] {
     }
   }
   add();
-  add(narrow ? "1-4 tabs   j/k scroll   q exit" : "1-4 / Tab tabs   j/k scroll   s sort   f filter   q / Esc exit");
+  add(narrow ? "1-5 tabs   j/k scroll   q exit" : "1-5 / Tab tabs   j/k scroll   s sort   f filter   q / Esc exit");
   return rows;
 }
 
@@ -333,8 +373,8 @@ export function dashboardLines(width: number, state: DashboardState): string[] {
 export function dashboardLineColor(line: string, index: number): "accent" | "border" | "muted" | "warning" | "text" {
   if(index === 0) return "accent";
   if(line.startsWith("─")) return "border";
-  if(/^(CONTEXT|MODEL \/ PROVIDER|TOKEN USAGE|ESTIMATED COST|SESSION TIMING|RECENT EXCHANGES|DAILY USAGE|PROJECTS)$/.test(line.trim())) return "accent";
-  if(line.includes("No timing records") || line.includes("Historical Token usage")) return "warning";
-  if(line.includes("tabs") || line.startsWith("1 Overview") || line.startsWith("3 Daily")) return "muted";
+  if(/^(CONTEXT|MODEL \/ PROVIDER|TOKEN USAGE|ESTIMATED COST|SESSION TIMING|PERFORMANCE \/ LAST RUN|SLOWEST OPERATIONS|RECENT EXCHANGES|DAILY USAGE|PROJECTS)$/.test(line.trim())) return "accent";
+  if(line.includes("No timing records") || line.includes("No phase timings") || line.includes("Historical Token usage")) return "warning";
+  if(line.includes("tabs") || line.startsWith("1 Overview") || line.startsWith("3 History") || line.startsWith("LLM wall") || line.startsWith("Legacy")) return "muted";
   return "text";
 }

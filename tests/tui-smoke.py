@@ -55,6 +55,8 @@ try:
     type_command("/pi-tui")
     read_until("USAGE / OVERVIEW", 15)
     read_until("MODEL / PROVIDER", 10)
+    os.write(fd, b"2")
+    read_until("PERFORMANCE / LAST RUN", 10)
     os.write(fd, b"q")
     time.sleep(0.2)
     reload_mark = len(OUTPUT)
