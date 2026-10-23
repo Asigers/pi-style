@@ -102,7 +102,7 @@ export function dashboardLines(width: number, state: DashboardState): string[] {
   if (width < 1) return [];
   const title = "♡ pi-style · usage atelier";
   const hint = "tab/1-4 view · j/k scroll · s sort · f filter · q/esc exit";
-  const rows: string[] = [title, "─".repeat(Math.max(1, Math.min(48, width))), `[1] Overview   [2] History   [3] Daily UTC   (${state.tab})`, ""];
+  const rows: string[] = [title, "─".repeat(Math.max(1, Math.min(48, width))), `[1] Overview   [2] History   [3] Daily UTC   [4] Projects   (${state.tab})`, ""];
   if (state.tab === "overview") {
     const totalTime = state.exchanges.reduce((sum, e) => sum + e.elapsedMs, 0);
     const avgMs = state.exchanges.length ? totalTime / state.exchanges.length : 0;
@@ -129,6 +129,23 @@ export function dashboardLines(width: number, state: DashboardState): string[] {
     if (!daily.length) rows.push("No completed exchanges yet.");
     for (const [date, item] of daily.slice(state.page, state.page + 8)) {
       rows.push(`${date}  ${item.count} turns  ${fmtDuration(item.elapsedMs)}  ${fmtTokens(item.usage.output)} out  ~$${item.usage.cost.toFixed(3)}`);
+    }
+  } else {
+    if(!state.globalRecords) rows.push("Enable /pi-global on for cross-session projects.");
+    else {
+      const groups = new Map<string, {count:number; elapsedMs:number; cost:number}>();
+      for(const record of state.globalRecords) {
+        const current = groups.get(record.project) ?? {count:0, elapsedMs:0, cost:0};
+        current.count++;
+        current.elapsedMs += record.elapsedMs;
+        current.cost += record.usage.cost;
+        groups.set(record.project, current);
+      }
+      const ordered = [...groups.entries()].sort((a,b)=>b[1].elapsedMs-a[1].elapsedMs);
+      for(const [project, data] of ordered.slice(state.page, state.page + 8)) {
+        rows.push(`${project} · ${data.count} turns · ${fmtDuration(data.elapsedMs)} · ~$\${data.cost.toFixed(3)}`);
+      }
+      if(!ordered.length) rows.push("No indexed exchanges yet.");
     }
   }
   rows.push("", hint);
