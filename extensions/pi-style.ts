@@ -50,6 +50,7 @@ export default function(pi: ExtensionAPI) {
   let originalToolsExpanded: boolean | undefined;
   let frame = 0;
   let nextLabel: string | undefined;
+  let globalTracking = false;
   const toolStarted = new Map<string, number>();
 
   function scan(ctx: ExtensionContext) {
@@ -219,6 +220,8 @@ export default function(pi: ExtensionAPI) {
   }
 
   pi.on("session_start", async (_event, ctx) => {
+    const { globalEnabled } = await import("../src/global-store.ts");
+    globalTracking = await globalEnabled();
     // Component factories may be reset by a Pi session reload.
     footerInstalled = false; headerInstalled = false; editorInstalled = false;
     editorCaptured = false; savedEditor = undefined; footerRerender = undefined;
@@ -288,7 +291,7 @@ export default function(pi: ExtensionAPI) {
     }
     render(ctx);
   });
-  pi.on("agent_settled", (event, ctx) => {
+  pi.on("agent_settled", async (event, ctx) => {
     if(!active) return;
     stopTimer();
     const current = active;
@@ -306,6 +309,15 @@ export default function(pi: ExtensionAPI) {
       modelMs: Math.round(current.modelMs), toolMs: Math.round(current.toolMs),
     };
     pi.appendEntry(ENTRY_TYPE, record);
+    if(globalTracking) {
+      try {
+        const { appendIndexedExchange } = await import("../src/global-store.ts");
+        const sessionId = ctx.sessionManager.getSessionId();
+        await appendIndexedExchange({...record, id: sessionId + ":" + record.startedAt, sessionId, project: ctx.cwd});
+      } catch(error) {
+        ctx.ui.notify(`pi-style index write failed: ${String(error)}`, "warning");
+      }
+    }
     scan(ctx);
     render(ctx);
   });
@@ -336,6 +348,31 @@ export default function(pi: ExtensionAPI) {
     },
   });
 
+  pi.registerCommand("pi-global", {
+    description: "Opt-in cross-session metrics: on | off | status",
+    handler: async(args, ctx) => {
+      const { globalEnabled, setGlobalEnabled } = await import("../src/global-store.ts");
+      const option = args.trim().toLowerCase();
+      if(option === "on" || option === "off") {
+        globalTracking = option === "on";
+        await setGlobalEnabled(globalTracking);
+      } else if(option === "status") {
+        globalTracking = await globalEnabled();
+      }
+      ctx.ui.notify(`Cross-session tracking ${globalTracking ? "ON" : "OFF"} (no prompt content)`, "info");
+    },
+  });
+  pi.registerCommand("pi-export", {
+    description: "Export opt-in cross-session metrics as JSON into ~/.pi/agent/pi-style/",
+    handler: async(_args, ctx) => {
+      if(!globalTracking) { ctx.ui.notify("First enable /pi-global on", "warning"); return; }
+      try {
+        const { readIndexedExchanges, exportMetricsJson } = await import("../src/global-store.ts");
+        const path = await exportMetricsJson(await readIndexedExchanges());
+        ctx.ui.notify(`pi-style exported: ${path}`, "info");
+      } catch(error) { ctx.ui.notify(`Export failed: ${String(error)}`, "error"); }
+    },
+  });
   pi.registerCommand("pi-label", {
     description: "Opt-in label for the next exchange; never stores prompt text",
     handler: async(args, ctx) => {
@@ -367,13 +404,16 @@ export default function(pi: ExtensionAPI) {
         return;
       }
       scan(ctx);
+      const globalRecords = globalTracking
+        ? await (await import("../src/global-store.ts")).readIndexedExchanges()
+        : undefined;
       const { matchesKey, truncateToWidth } = await import("@earendil-works/pi-tui");
       await ctx.ui.custom<void>((tui, theme, _kb, done) => {
         let tab: DashboardTab = "overview";
         let sort: HistorySort = "recent";
         let filter: HistoryFilter = "all";
         let page = 0;
-        const tabs: DashboardTab[] = ["overview","history","daily"];
+        const tabs: DashboardTab[] = ["overview","history","daily","projects"];
         const sorts: HistorySort[] = ["recent","slowest","tokens"];
         const filters: HistoryFilter[] = ["all","success","aborted"];
         const component = {
@@ -382,6 +422,7 @@ export default function(pi: ExtensionAPI) {
             const state: DashboardState = {
               tab, sort, filter, page, usage: branchUsage(ctx.sessionManager.getBranch()),
               exchanges: branchExchanges(ctx.sessionManager.getBranch()),
+              globalRecords,
               contextPercent: ctx.getContextUsage()?.percent,
               model: ctx.model?.id ?? "unknown",
             };
@@ -391,7 +432,7 @@ export default function(pi: ExtensionAPI) {
           },
           handleInput(data: string) {
             if(data === "q" || matchesKey(data, "escape")) { done(); return; }
-            if(data === "1" || data === "2" || data === "3") {
+            if(data === "1" || data === "2" || data === "3" || data === "4") {
               tab = tabs[Number(data)-1]!; page = 0;
             } else if(matchesKey(data, "tab") || matchesKey(data, "right")) {
               tab = tabs[(tabs.indexOf(tab)+1)%tabs.length]!; page = 0;
@@ -404,7 +445,8 @@ export default function(pi: ExtensionAPI) {
             } else if(data === "j" || matchesKey(data, "down")) {
               const len = tab === "history"
                 ? filteredHistory(branchExchanges(ctx.sessionManager.getBranch()), filter, sort).length
-                : tab === "daily" ? new Set(branchExchanges(ctx.sessionManager.getBranch()).map(e => e.startedAt.slice(0,10))).size : 0;
+                : tab === "daily" ? new Set((globalRecords ?? branchExchanges(ctx.sessionManager.getBranch())).map(e => e.startedAt.slice(0,10))).size
+                : tab === "projects" ? new Set((globalRecords ?? []).map(e => e.project)).size : 0;
               page = Math.min(Math.max(0, len-1), page+1);
             } else if(data === "k" || matchesKey(data, "up")) {
               page = Math.max(0, page-1);
