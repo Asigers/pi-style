@@ -329,6 +329,7 @@ export default function(pi: ExtensionAPI) {
       if(first === "cute" || first === "compact" || first === "off") {
         appearance = first;
         await applySkin(ctx);
+        render(ctx);
         ctx.ui.notify(`pi-style: ${first}`, "info");
       } else if(first === "theme") {
         const result = ctx.ui.setTheme(THEME);
