@@ -67,6 +67,8 @@ export default function(pi: ExtensionAPI) {
   let frame = 0;
   let nextLabel: string | undefined;
   let globalTracking = false;
+  let themeReapplyTimer: ReturnType<typeof setTimeout> | undefined;
+  let sessionEpoch = 0;
   const toolStarted = new Map<string, number>();
 
   function scan(ctx: ExtensionContext) {
@@ -77,6 +79,10 @@ export default function(pi: ExtensionAPI) {
   function stopTimer() {
     if(timer) clearInterval(timer);
     timer = undefined;
+  }
+  function cancelThemeReapply() {
+    if(themeReapplyTimer) clearTimeout(themeReapplyTimer);
+    themeReapplyTimer = undefined;
   }
   function durationMs() {
     const latest = exchanges.at(-1);
@@ -134,6 +140,7 @@ export default function(pi: ExtensionAPI) {
   async function applySkin(ctx: ExtensionContext) {
     if(!ctx.hasUI || ctx.mode !== "tui") return;
     if(appearance === "off") {
+      cancelThemeReapply();
       if(footerInstalled) { ctx.ui.setFooter(undefined); footerInstalled = false; footerRerender = undefined; }
       if(headerInstalled) { ctx.ui.setHeader(undefined); headerInstalled = false; }
       if(editorInstalled) { ctx.ui.setEditorComponent(editorCaptured ? savedEditor : undefined); editorInstalled = false; }
@@ -253,9 +260,23 @@ export default function(pi: ExtensionAPI) {
     editorCaptured = false; savedEditor = undefined; footerRerender = undefined;
     reset(ctx);
     await applySkin(ctx);
+    // Pi re-applies settings AFTER extension binding during session switching.
+    // Reassert the in-memory style after that synchronous rebind step.
+    // Guard against stale callbacks after rapid /new or /resume.
+    cancelThemeReapply();
+    const epoch = ++sessionEpoch;
+    if(ctx.mode === "tui" && appearance !== "off") {
+      themeReapplyTimer = setTimeout(() => {
+        themeReapplyTimer = undefined;
+        if(epoch !== sessionEpoch || appearance === "off") return;
+        void applySkin(ctx);
+      }, 0);
+    }
   });
   pi.on("session_tree", (_event, ctx) => { scan(ctx); render(ctx); });
   pi.on("session_shutdown", async (_event, ctx) => {
+    sessionEpoch++;
+    cancelThemeReapply();
     stopTimer(); toolStarted.clear(); active = undefined;
     // Do not change the user's theme/other extensions on shutdown.
     if(ctx.hasUI) {
