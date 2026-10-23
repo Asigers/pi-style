@@ -13,10 +13,11 @@
     "tokens"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=22.19.0"
   },
   "scripts": {
-    "test": "node --experimental-strip-types --test tests/metrics.test.ts tests/extension.test.ts tests/ui-layout.test.ts tests/theme.test.ts tests/global-store.test.ts"
+    "test": "node --experimental-strip-types --test tests/metrics.test.ts tests/extension.test.ts tests/ui-layout.test.ts tests/theme.test.ts tests/global-store.test.ts",
+    "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
@@ -29,5 +30,11 @@
     "themes": [
       "./themes/pi-style-blush.json"
     ]
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "1.4.0",
+    "@earendil-works/pi-tui": "1.4.0",
+    "@types/node": "^22.16.0",
+    "typescript": "^5.9.3"
   }
 }
