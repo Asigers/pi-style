@@ -54,13 +54,20 @@ try:
     read_until("CTX --%", 10)
     type_command("/pi-tui")
     read_until("USAGE / OVERVIEW", 15)
+    read_until("MODEL / PROVIDER", 10)
     os.write(fd, b"q")
+    time.sleep(0.2)
+    reload_mark = len(OUTPUT)
+    type_command("/reload")
+    read_until("Reloaded keybindings", 35)
+    if b"pi-style theme unavailable" in OUTPUT[reload_mark:]:
+        fail("reload displayed a spurious unavailable-theme warning")
     time.sleep(0.35)
     type_command("/pi-style off")
     read_until("pi-style: off", 15)
     type_command("/pi-style cute")
     read_until("pi-style: cute", 15)
-    print("TUI PTY smoke passed: Border Collie, dashboard, off/on.", flush=True)
+    print("TUI PTY smoke passed: Border Collie, dashboard, reload, off/on.", flush=True)
 finally:
     try:
         os.kill(pid, signal.SIGKILL)
