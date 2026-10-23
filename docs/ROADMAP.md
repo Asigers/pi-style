@@ -35,7 +35,7 @@ Pi public APIs are used throughout: `setTheme`, `setHeader`, `setFooter`, `setEd
 
 ## P3 · personal UI (v0.2)
 
-- [x] Optional kitten startup Header; compact mode restores built-in header
+- [x] Optional Border Collie startup Header; compact mode restores built-in header
 - [x] Decorative `CustomEditor` marker (stock editing, no remapping)
 - [x] Reduced-motion default and optional tiny footer heartbeat
 - [x] Optional low-noise/collapsed native tool output (`/pi-style quiet`)
