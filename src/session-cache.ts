@@ -3,7 +3,6 @@ import { branchUsage, branchExchanges, type ExchangeRecord, type Usage } from ".
 export interface BranchSessionSource {
   getSessionId(): string;
   getLeafId(): string | null;
-  getEntryCount(): number;
   getBranch(): unknown[];
 }
 
@@ -18,7 +17,7 @@ export class SessionStatsCache {
   private value: BranchSnapshot | undefined;
 
   get(session: BranchSessionSource): BranchSnapshot {
-    const key = JSON.stringify([session.getSessionId(), session.getLeafId(), session.getEntryCount()]);
+    const key = JSON.stringify([session.getSessionId(), session.getLeafId()]);
     if(this.key === key && this.value) return this.value;
     const entries=session.getBranch();
     const value={usage:branchUsage(entries),exchanges:branchExchanges(entries)};
