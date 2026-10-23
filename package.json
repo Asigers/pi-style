@@ -1,8 +1,8 @@
 {
   "name": "@asigers/pi-style",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
-  "description": "Single-palette cute TUI and usage analytics for Pi Coding Agent",
+  "description": "Forest Night TUI with context-first status and local usage analytics for Pi Coding Agent",
   "type": "module",
   "license": "MIT",
   "keywords": [
@@ -28,7 +28,7 @@
       "./extensions/pi-style.ts"
     ],
     "themes": [
-      "./themes/pi-style-blush.json"
+      "./themes/pi-style-forest.json"
     ]
   },
   "devDependencies": {
