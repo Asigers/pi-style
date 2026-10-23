@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import { SessionStatsCache } from "../src/session-cache.ts";
+import { TimingLedger } from "../src/timing.ts";
 import {
   ENTRY_TYPE, addUsage, emptyUsage, subtractUsage,
   fmtDuration, fmtTokens, messageUsage,
@@ -38,9 +39,11 @@ interface ActiveExchange {
   segmentModelMs: number;
   segmentToolMs: number;
   completedSegments: ExchangeRecord[];
+  timing: TimingLedger;
 }
 
 const KEY = "pi-style";
+const ACTIVITY_KEY = "pi-style.activity";
 const THEME = "pi-style-forest";
 const money = (cost: number) => `~$${cost.toFixed(4)}`;
 
@@ -95,6 +98,7 @@ export default function(pi: ExtensionAPI) {
     if(appearance === "off") {
       ctx.ui.setStatus(KEY, undefined);
       ctx.ui.setWidget(KEY, undefined);
+      if(ctx.mode==="tui")ctx.ui.setWidget(ACTIVITY_KEY, undefined);
       footerRerender?.();
       return;
     }
@@ -113,6 +117,16 @@ export default function(pi: ExtensionAPI) {
     } else {
       ctx.ui.setStatus(KEY, undefined);
       footerRerender?.();
+    }
+
+    // Ephemeral activity line is intentionally separate from persistent Footer.
+    // Do not retain tool arguments, command text or any model content.
+    if(ctx.mode === "tui") {
+      const phase=active?.timing.getRunningLabel();
+      ctx.ui.setWidget(ACTIVITY_KEY,
+        active && appearance === "cute" && phase
+          ? [`  ▸ ${phase}    ${fmtDuration(Math.max(0,performance.now()-active.startedMonoMs))}`]
+          : undefined, {placement:"aboveEditor"});
     }
 
     if(panel === "none") {
@@ -196,6 +210,7 @@ export default function(pi: ExtensionAPI) {
       }
       ctx.ui.setStatus(KEY, undefined);
       ctx.ui.setWidget(KEY, undefined);
+      ctx.ui.setWidget(ACTIVITY_KEY, undefined);
       return;
     }
     // Startup and /reload may run before Pi registers newly installed themes.
@@ -296,6 +311,7 @@ export default function(pi: ExtensionAPI) {
     stopTimer();
     toolStarted.clear();
     active = undefined;
+    if(ctx.hasUI && ctx.mode==="tui")ctx.ui.setWidget(ACTIVITY_KEY,undefined);
     scan(ctx);
     render(ctx);
   }
@@ -330,6 +346,7 @@ export default function(pi: ExtensionAPI) {
     if(ctx.hasUI) {
       ctx.ui.setStatus(KEY, undefined);
       ctx.ui.setWidget(KEY, undefined);
+      if(ctx.mode==="tui")ctx.ui.setWidget(ACTIVITY_KEY,undefined);
     }
   });
   pi.on("model_select", (_event, ctx) => render(ctx));
@@ -339,6 +356,7 @@ export default function(pi: ExtensionAPI) {
     statsCache.invalidate();
     const currentUsage = statsCache.get(ctx.sessionManager).usage;
     const isShared = run.userMessages > 1;
+    const timing = run.timing.snapshot(run.segmentStartedMonoMs, endedMonoMs);
     const record: ExchangeRecord = {
       version: 1,
       startedAt: new Date(run.segmentStartedAtMs).toISOString(),
@@ -353,6 +371,7 @@ export default function(pi: ExtensionAPI) {
       ...(run.segmentFirstOutputMs === undefined ? {} : { firstOutputMs: Math.round(run.segmentFirstOutputMs) }),
       modelMs: Math.round(run.modelMs - run.segmentModelMs),
       toolMs: Math.round(run.toolMs - run.segmentToolMs),
+      ...timing,
       // For queued inputs we measure processing from message_start, not queue wait.
       timingBasis: isShared ? "processing" : "agent-start",
       sharedRun: isShared,
@@ -372,9 +391,23 @@ export default function(pi: ExtensionAPI) {
       baseline, userMessages: 0, segmentStartedAtMs: now, segmentStartedMonoMs: mono,
       segmentBaseline: baseline, segmentAssistantMessages: 0, segmentToolCalls: 0,
       segmentModelMs: 0, segmentToolMs: 0, segmentLabel: nextLabel, completedSegments: [],
+      timing: new TimingLedger(),
     };
     nextLabel = undefined;
     startTimer(ctx);
+    render(ctx);
+  });
+
+  // Turn boundaries begin before the assistant stream and include provider
+  // request preparation, unlike message_start which misses time-to-first-output.
+  pi.on("turn_start", (_event, ctx) => {
+    if(!active) return;
+    active.timing.startLLM(performance.now());
+    render(ctx);
+  });
+  pi.on("turn_end", (_event, ctx) => {
+    if(!active) return;
+    active.timing.endLLM(performance.now());
     render(ctx);
   });
 
@@ -418,6 +451,7 @@ export default function(pi: ExtensionAPI) {
       active.modelMs += Math.max(0, performance.now() - active.modelStart);
       active.modelStart = undefined;
     }
+    active.timing.endLLM(performance.now());
     active.assistantMessages++;
     active.usage = addUsage(active.usage, messageUsage(event.message));
     render(ctx);
@@ -425,11 +459,15 @@ export default function(pi: ExtensionAPI) {
   pi.on("tool_execution_start", (event, ctx) => {
     if(!active) return;
     active.toolCalls++;
-    toolStarted.set(event.toolCallId, performance.now());
+    const startedAt=performance.now();
+    toolStarted.set(event.toolCallId, startedAt);
+    active.timing.startTool(event.toolCallId,event.toolName,startedAt);
     render(ctx);
   });
   pi.on("tool_execution_end", (event, ctx) => {
     if(!active) return;
+    const endedAt=performance.now();
+    active.timing.endTool(event.toolCallId,endedAt);
     const started = toolStarted.get(event.toolCallId);
     if(started !== undefined) {
       active.toolMs += typeof event.durationMs === "number"
@@ -447,6 +485,7 @@ export default function(pi: ExtensionAPI) {
     active=undefined;
     toolStarted.clear();
     const endedAtMs=Date.now(), endedMonoMs=performance.now();
+    run.timing.endLLM(endedMonoMs);
     // If a retried/custom sequence did not re-emit the user message, keep the
     // initial user request rather than inventing an extra prompt.
     finishSegment(run, ctx, endedAtMs, endedMonoMs, event.aborted === true);
@@ -475,6 +514,31 @@ export default function(pi: ExtensionAPI) {
     statsCache.invalidate();
     scan(ctx);
     render(ctx);
+  });
+
+  // Preserve Pi's native call/result content and controls; only add a
+  // compact tool status accent. Leave custom/self-rendered tools untouched.
+  pi.registerToolRenderer((name, next) => {
+    const base=next();
+    if(appearance!=="cute" || !base || base.renderShell==="self" ||
+      !["bash","read","edit","write","grep","find","ls"].includes(name)) return base;
+    return {
+      ...base,
+      renderResult: base.renderResult ? (result, options, theme, context) => {
+        const child=base.renderResult!(result,options,theme,context);
+        return {
+          invalidate(){child.invalidate?.()},
+          render(width:number) {
+            if(width<20) return child.render(width);
+            const duration=typeof context.durationMs==="number" ? "  "+(context.durationMs/1000).toFixed(1)+"s" : "";
+            const text=(context.isError ? "✕" : options.isPartial ? "…" : "✓")+
+              "  "+name.toUpperCase()+duration;
+            const label=theme.fg(context.isError?"error":"success",text);
+            return [label,...child.render(width)];
+          },
+        };
+      } : undefined,
+    };
   });
 
   pi.registerCommand("pi-style", {
