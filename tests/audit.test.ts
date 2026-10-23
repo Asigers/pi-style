@@ -59,7 +59,7 @@ test("real TUI UI API paths restore original theme without persisting settings",
   };
   const ui={
     get theme(){return currentTheme;},
-    getTheme:(name:string)=>name==="pi-style-forest"?blush:undefined,
+    getTheme:(name:string)=>name==="pi-style-forest"?forest:undefined,
     setTheme:(value:string|{name:string})=>{
       if(typeof value === "string") writes.push(value);
       else currentTheme=value;
