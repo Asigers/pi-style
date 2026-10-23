@@ -154,7 +154,7 @@ test("long /name sessions sanitize control sequences and truncate to 36 terminal
   assert.ok(lines.some(line=>line.includes("修复异常")));
   assert.ok(lines.every(line=>visibleWidth(line)<=110));
   assert.ok(!footerLines(120,{...base,sessionTitle:"    "}).some(line=>line.includes("SESSION")));
-  const control=footerLines(120,{...base,sessionTitle:"恶意\\x1b[31m标题\\n下一行"});
-  assert.ok(!control.join("").includes("\\x1b"));
+  const control=footerLines(120,{...base,sessionTitle:"恶意" + String.fromCharCode(27) + "[31m标题\n下一行"});
+  assert.ok(!control.join("").includes(String.fromCharCode(27)));
   assert.ok(control.every(line=>visibleWidth(line)<=120));
 });
