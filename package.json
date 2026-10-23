@@ -1,6 +1,6 @@
 {
   "name": "@asigers/pi-style",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "private": true,
   "description": "Forest Night TUI with context-first status and local usage analytics for Pi Coding Agent",
   "type": "module",
@@ -16,7 +16,7 @@
     "node": ">=22.19.0"
   },
   "scripts": {
-    "test": "node --experimental-strip-types --test tests/metrics.test.ts tests/extension.test.ts tests/ui-layout.test.ts tests/theme.test.ts tests/global-store.test.ts tests/audit.test.ts",
+    "test": "node --experimental-strip-types --test tests/metrics.test.ts tests/extension.test.ts tests/ui-layout.test.ts tests/theme.test.ts tests/global-store.test.ts tests/audit.test.ts tests/timing.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
